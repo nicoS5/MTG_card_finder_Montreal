@@ -4,7 +4,6 @@ import re
 from bs4 import BeautifulSoup
 import requests
 from datetime import datetime
-import os
 from supabase import create_client
 
 # Functions ---------------------------------------------------------------------------------------------------------------------
@@ -429,8 +428,8 @@ Si tout est bon, c'est parti pour la recherche des cartes :
 # Lancement de la recherche de prix dans les magasins
 if st.button("Lancer la recherche !"):
 
-    url: str = os.environ.get("SUPABASE_URL", "")
-    key: str = os.environ.get("SUPABASE_KEY", "")
+    url: str = st.secrets["supabase"]["SUPABASE_URL"]
+    key: str  = st.secrets["supabase"]["SUPABASE_KEY"]
 
     message_mag_placerholder = st.empty()
     progress_placeholder = st.empty()
