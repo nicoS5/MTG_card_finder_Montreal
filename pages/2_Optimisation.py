@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import os
 from supabase import create_client
 import re
 
@@ -167,8 +166,8 @@ st.set_page_config(
 list_of_basic_lands = ["plains", "island", "swamp", "mountain", "forest", "wastes"]
 
 ## VARIABLE GLOBAL
-url: str = os.environ.get("SUPABASE_URL", "")
-key: str = os.environ.get("SUPABASE_KEY", "")
+url: str = st.secrets["supabase"]["SUPABASE_URL"]
+key: str  = st.secrets["supabase"]["SUPABASE_KEY"]
 supabase = create_client(url, key)
 
 ## Initialiser les données
