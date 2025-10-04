@@ -1,6 +1,5 @@
 streamlit
 pandas
-re
 bs4
 requests
 datetime
