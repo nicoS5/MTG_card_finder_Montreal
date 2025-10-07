@@ -6,6 +6,11 @@ import requests
 from datetime import datetime
 from supabase import create_client
 
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+import time
+
+
 # Functions ---------------------------------------------------------------------------------------------------------------------
 def separation_intrant_carte(intrant):
     """
@@ -82,7 +87,8 @@ def update_df_resultat_magasin(df_resultat_magasin, ligne, nom_carte, prix_carte
     df_resultat_magasin.loc[ligne, "lien_carte"] = lien_carte
 
     return(df_resultat_magasin)
-def get_prix_du_valet_de_coeur(df_cartes_intrant, message_mag_placerholder, progress_placeholder, message_magasin, list_of_basic_lands):
+def get_prix_du_valet_de_coeur(df_cartes_intrant, message_mag_placerholder, progress_placeholder, message_magasin, list_of_basic_lands, session):
+    
     df_resultat_magasin_total = creat_empty_df_resultat_magasin(0)
 
     for index_df, carte in enumerate(df_cartes_intrant.itertuples()): # Boucle sur toutes les cartes dans le magasin
@@ -99,90 +105,101 @@ def get_prix_du_valet_de_coeur(df_cartes_intrant, message_mag_placerholder, prog
         compteur_instance_carte: int = 0
         while Go_to_next_page:
 
-            # Obtention de l'URL pour la carte
+            # print(carte.nom_carte, "-> page", compteur_page
             url_site: str = get_VdC_url(carte.nom_carte, compteur_page=compteur_page)
 
-            # print(carte.nom_carte, "-> page", compteur_page)
-            page_site: requests = requests.get(url_site)
-            soup_site: BeautifulSoup = BeautifulSoup(page_site.text, features="lxml")
+            try:
+                # Faire la requête avec la session
+                page_site = session.get(url_site, timeout=30)
+                page_site.raise_for_status()
 
-            match_pour_date_recherche = re.search(r'([^.]+).', str(datetime.now()))
-            date_recherche = match_pour_date_recherche.group(1) if match_pour_date_recherche else None
+                soup_site: BeautifulSoup = BeautifulSoup(page_site.text, features="lxml")
 
-            soup_card_container: BeautifulSoup = soup_site.find("ul", class_="products")
-            if soup_card_container == None: break
+                match_pour_date_recherche = re.search(r'([^.]+).', str(datetime.now()))
+                date_recherche = match_pour_date_recherche.group(1) if match_pour_date_recherche else None
 
-            soup_all_cards: list[BeautifulSoup] = soup_card_container.find_all("li") 
+                soup_card_container: BeautifulSoup = soup_site.find("ul", class_="products")
+                if soup_card_container == None: break
 
-            for i_carte_magazin in range(len(soup_all_cards)):
+                soup_all_cards: list[BeautifulSoup] = soup_card_container.find_all("li") 
 
-                if compteur_instance_carte >= 100 : 
-                    Go_to_next_page = False
-                    break
+                for i_carte_magazin in range(len(soup_all_cards)):
 
-                soup_card_info: BeautifulSoup = soup_all_cards[i_carte_magazin].find("div", class_="image")
-                
-                match_pour_nom_carte = re.search(r'title="([^"]*)"', str(soup_card_info))
-                nom_carte = match_pour_nom_carte.group(1).lower() if match_pour_nom_carte else None
+                    if compteur_instance_carte >= 100 : 
+                        Go_to_next_page = False
+                        break
 
-                Bad_card_name: bool = Is_other_named_card(nom_carte, carte.nom_carte)
-                if Bad_card_name:
-                    Go_to_next_page: bool = False
-                    continue
-
-                match_pour_lien_carte = re.search(r'href="([^"]*)"', str(soup_card_info))
-                lien_carte = "https://www.carte.levalet.com" + match_pour_lien_carte.group(1) if match_pour_lien_carte else None
-            
-                soup_card_info: BeautifulSoup = soup_all_cards[i_carte_magazin].find_all("div", class_="variant-row row")
-
-                if (len(soup_card_info) <= 0) :
+                    soup_card_info: BeautifulSoup = soup_all_cards[i_carte_magazin].find("div", class_="image")
                     
-                    df_resultat_magasin = update_df_resultat_magasin(df_resultat_magasin, ligne= compteur_instance_carte, 
-                                                                    nom_carte= nom_carte, prix_carte= 999999.99, 
-                                                                    langue_carte= "OoS", etat_carte= "OoS", 
-                                                                    stock_carte= 0, date_recherche= date_recherche,
-                                                                    page_magasin= compteur_page, lien_carte= lien_carte) 
+                    match_pour_nom_carte = re.search(r'title="([^"]*)"', str(soup_card_info))
+                    nom_carte = match_pour_nom_carte.group(1).lower() if match_pour_nom_carte else None
 
-                    compteur_instance_carte += 1
+                    Bad_card_name: bool = Is_other_named_card(nom_carte, carte.nom_carte)
+                    if Bad_card_name:
+                        Go_to_next_page: bool = False
+                        continue
+
+                    match_pour_lien_carte = re.search(r'href="([^"]*)"', str(soup_card_info))
+                    lien_carte = "https://www.carte.levalet.com" + match_pour_lien_carte.group(1) if match_pour_lien_carte else None
                 
-                else :
-                    for j_carte_version in range(len(soup_card_info)):
+                    soup_card_info: BeautifulSoup = soup_all_cards[i_carte_magazin].find_all("div", class_="variant-row row")
 
-                        etat_et_langue_carte: str = str(soup_card_info[j_carte_version].find("span", class_="variant-main-info"))
-
-                        match_pour_etat_et_langue_carte = re.search(r'class="variant-short-info variant-description">([^,<]+),\s*([^,<]+)<', etat_et_langue_carte)
-                        etat_carte = match_pour_etat_et_langue_carte.group(1) if match_pour_etat_et_langue_carte else None
-                        langue_carte = match_pour_etat_et_langue_carte.group(2) if match_pour_etat_et_langue_carte else None
-
-                        match_pour_stock_carte = re.search(r'class="variant-short-info variant-qty">([0-9]+)\s', etat_et_langue_carte)
-                        stock_carte = int(match_pour_stock_carte.group(1)) if match_pour_stock_carte else None
-
-                        card_info: str = str(soup_card_info[j_carte_version].find("form", class_="add-to-cart-form"))
-
-                        match_pour_prix = re.search(r'data-price="[^$]*\$\s*([0-9.]+)"', card_info)
-                        prix_carte = float(match_pour_prix.group(1)) if match_pour_prix else None
-
+                    if (len(soup_card_info) <= 0) :
+                        
                         df_resultat_magasin = update_df_resultat_magasin(df_resultat_magasin, ligne= compteur_instance_carte, 
-                                                                    nom_carte= nom_carte, prix_carte= prix_carte, 
-                                                                    langue_carte= langue_carte, etat_carte= etat_carte, 
-                                                                    stock_carte= stock_carte, date_recherche= date_recherche,
-                                                                    page_magasin= compteur_page, lien_carte= lien_carte) 
+                                                                        nom_carte= nom_carte, prix_carte= 999999.99, 
+                                                                        langue_carte= "OoS", etat_carte= "OoS", 
+                                                                        stock_carte= 0, date_recherche= date_recherche,
+                                                                        page_magasin= compteur_page, lien_carte= lien_carte) 
 
                         compteur_instance_carte += 1
-                        if compteur_instance_carte >= 100 : break
-            
-            if Go_to_next_page: # Si la page est rempli de differente version de la carte en stock, alors on va voir la page suivante
+                    
+                    else :
+                        for j_carte_version in range(len(soup_card_info)):
 
-                compteur_page += 1
-                if compteur_page >= 4: break # On va voir maximum la 3e page, au dela on arrete
+                            etat_et_langue_carte: str = str(soup_card_info[j_carte_version].find("span", class_="variant-main-info"))
 
-                url_site: str = get_VdC_url(carte.nom_carte, compteur_page=compteur_page)
+                            match_pour_etat_et_langue_carte = re.search(r'class="variant-short-info variant-description">([^,<]+),\s*([^,<]+)<', etat_et_langue_carte)
+                            etat_carte = match_pour_etat_et_langue_carte.group(1) if match_pour_etat_et_langue_carte else None
+                            langue_carte = match_pour_etat_et_langue_carte.group(2) if match_pour_etat_et_langue_carte else None
+
+                            match_pour_stock_carte = re.search(r'class="variant-short-info variant-qty">([0-9]+)\s', etat_et_langue_carte)
+                            stock_carte = int(match_pour_stock_carte.group(1)) if match_pour_stock_carte else None
+
+                            card_info: str = str(soup_card_info[j_carte_version].find("form", class_="add-to-cart-form"))
+
+                            match_pour_prix = re.search(r'data-price="[^$]*\$\s*([0-9.]+)"', card_info)
+                            prix_carte = float(match_pour_prix.group(1)) if match_pour_prix else None
+
+                            df_resultat_magasin = update_df_resultat_magasin(df_resultat_magasin, ligne= compteur_instance_carte, 
+                                                                        nom_carte= nom_carte, prix_carte= prix_carte, 
+                                                                        langue_carte= langue_carte, etat_carte= etat_carte, 
+                                                                        stock_carte= stock_carte, date_recherche= date_recherche,
+                                                                        page_magasin= compteur_page, lien_carte= lien_carte) 
+
+                            compteur_instance_carte += 1
+                            if compteur_instance_carte >= 100 : break
+                
+                if Go_to_next_page: # Si la page est rempli de differente version de la carte en stock, alors on va voir la page suivante
+
+                    compteur_page += 1
+                    if compteur_page >= 4: break # On va voir maximum la 3e page, au dela on arrete
+
+                    url_site: str = get_VdC_url(carte.nom_carte, compteur_page=compteur_page)
+                                
+            except requests.exceptions.RequestException as e:
+                print(f"❌ Erreur de requête pour {url_site}: {e}")
+                continue
+
+            except Exception as e:
+                print(f"❓ Erreur inconnue pour {carte.nom_carte}: {e}")
+                continue
 
         df_resultat_magasin = df_resultat_magasin[df_resultat_magasin["nom_carte"] != ""] 
         df_resultat_magasin_total = pd.concat([df_resultat_magasin_total, df_resultat_magasin], ignore_index=True)
-        
+
     return(df_resultat_magasin_total)
-def get_prix_de_l_expedition(df_cartes_intrant, message_mag_placerholder, progress_placeholder, message_magasin, list_of_basic_lands):
+def get_prix_de_l_expedition(df_cartes_intrant, message_mag_placerholder, progress_placeholder, message_magasin, list_of_basic_lands, session):
     df_resultat_magasin_total = creat_empty_df_resultat_magasin(0)
 
     for index_df, carte in enumerate(df_cartes_intrant.itertuples()): # Boucle sur toutes les cartes dans le magasin
@@ -199,92 +216,102 @@ def get_prix_de_l_expedition(df_cartes_intrant, message_mag_placerholder, progre
         compteur_instance_carte: int = 0
         while Go_to_next_page:
 
-            # Obtention de l'URL pour la carte
+            # print(carte.nom_carte, "-> page", compteur_page)
             url_site: str = get_Expedition_url(carte.nom_carte, compteur_page=compteur_page)
             
-            # print(carte.nom_carte, "-> page", compteur_page)
-            page_site: requests = requests.get(url_site)
-            soup_site: BeautifulSoup = BeautifulSoup(page_site.text, features="lxml")
+            try:
+                # Faire la requête avec la session
+                page_site = session.get(url_site, timeout=30)
+                page_site.raise_for_status()
 
-            match_pour_date_recherche = re.search(r'([^.]+).', str(datetime.now()))
-            date_recherche = match_pour_date_recherche.group(1) if match_pour_date_recherche else None
+                soup_site: BeautifulSoup = BeautifulSoup(page_site.text, features="lxml")
 
-            soup_card_container: BeautifulSoup = soup_site.find("ul", class_="products")
-            if soup_card_container == None: print(url_site)
-            if soup_card_container == None: break
+                match_pour_date_recherche = re.search(r'([^.]+).', str(datetime.now()))
+                date_recherche = match_pour_date_recherche.group(1) if match_pour_date_recherche else None
 
-            soup_all_cards: list[BeautifulSoup] = soup_card_container.find_all("li") 
+                soup_card_container: BeautifulSoup = soup_site.find("ul", class_="products")
+                if soup_card_container == None: print(url_site)
+                if soup_card_container == None: break
 
-            for i_carte_magazin in range(len(soup_all_cards)):
+                soup_all_cards: list[BeautifulSoup] = soup_card_container.find_all("li") 
 
-                if compteur_instance_carte >= 100 : 
-                    Go_to_next_page = False
-                    break
+                for i_carte_magazin in range(len(soup_all_cards)):
 
-                soup_card_info: BeautifulSoup = soup_all_cards[i_carte_magazin].find("div", class_="image")
-                
-                match_pour_nom_carte = re.search(r'title="([^"]*)"', str(soup_card_info))
-                nom_carte = match_pour_nom_carte.group(1).lower() if match_pour_nom_carte else None
+                    if compteur_instance_carte >= 100 : 
+                        Go_to_next_page = False
+                        break
 
-                Bad_card_name: bool = Is_other_named_card(nom_carte, carte.nom_carte)
-                if Bad_card_name:
-                    Go_to_next_page: bool = False
-                    continue
-
-                match_pour_lien_carte = re.search(r'href="([^"]*)"', str(soup_card_info))
-                lien_carte = "https://www.expeditionjeux.com" + match_pour_lien_carte.group(1) if match_pour_lien_carte else None
-            
-                soup_card_info: BeautifulSoup = soup_all_cards[i_carte_magazin].find_all("div", class_="variant-row row")
-
-                if (len(soup_card_info) <= 0) :
+                    soup_card_info: BeautifulSoup = soup_all_cards[i_carte_magazin].find("div", class_="image")
                     
-                    df_resultat_magasin = update_df_resultat_magasin(df_resultat_magasin, ligne= compteur_instance_carte, 
-                                                                    nom_carte= nom_carte, prix_carte= 999999.99, 
-                                                                    langue_carte= "OoS", etat_carte= "OoS", 
-                                                                    stock_carte= 0, date_recherche= date_recherche,
-                                                                    page_magasin= compteur_page, lien_carte= lien_carte) 
+                    match_pour_nom_carte = re.search(r'title="([^"]*)"', str(soup_card_info))
+                    nom_carte = match_pour_nom_carte.group(1).lower() if match_pour_nom_carte else None
 
-                    compteur_instance_carte += 1
+                    Bad_card_name: bool = Is_other_named_card(nom_carte, carte.nom_carte)
+                    if Bad_card_name:
+                        Go_to_next_page: bool = False
+                        continue
+
+                    match_pour_lien_carte = re.search(r'href="([^"]*)"', str(soup_card_info))
+                    lien_carte = "https://www.expeditionjeux.com" + match_pour_lien_carte.group(1) if match_pour_lien_carte else None
                 
-                else :
-                    for j_carte_version in range(len(soup_card_info)):
+                    soup_card_info: BeautifulSoup = soup_all_cards[i_carte_magazin].find_all("div", class_="variant-row row")
 
-                        etat_et_langue_carte: str = str(soup_card_info[j_carte_version].find("span", class_="variant-main-info"))
-
-                        match_pour_etat_et_langue_carte = re.search(r'class="variant-short-info variant-description">([^,<]+),\s*([^,<]+),\s*([^,<]+)<', etat_et_langue_carte)
-                        etat_carte = match_pour_etat_et_langue_carte.group(1) if match_pour_etat_et_langue_carte else None
-                        langue_carte = match_pour_etat_et_langue_carte.group(2) if match_pour_etat_et_langue_carte else None
-
-                        match_pour_stock_carte = re.search(r'class="variant-short-info variant-qty">\s*([0-9]+)\s*', etat_et_langue_carte)
-                        stock_carte = int(match_pour_stock_carte.group(1)) if match_pour_stock_carte else None
-
-                        card_info: str = str(soup_card_info[j_carte_version].find("form", class_="add-to-cart-form"))
-
-                        match_pour_prix = re.search(r'data-price="[^$]*\$\s*([0-9.]+)"', card_info)
-                        prix_carte = float(match_pour_prix.group(1)) if match_pour_prix else None
-
+                    if (len(soup_card_info) <= 0) :
+                        
                         df_resultat_magasin = update_df_resultat_magasin(df_resultat_magasin, ligne= compteur_instance_carte, 
-                                                                    nom_carte= nom_carte, prix_carte= prix_carte, 
-                                                                    langue_carte= langue_carte, etat_carte= etat_carte, 
-                                                                    stock_carte= stock_carte, date_recherche= date_recherche,
-                                                                    page_magasin= compteur_page, lien_carte= lien_carte) 
+                                                                        nom_carte= nom_carte, prix_carte= 999999.99, 
+                                                                        langue_carte= "OoS", etat_carte= "OoS", 
+                                                                        stock_carte= 0, date_recherche= date_recherche,
+                                                                        page_magasin= compteur_page, lien_carte= lien_carte) 
 
                         compteur_instance_carte += 1
-                        if compteur_instance_carte >= 100 : break
+                    
+                    else :
+                        for j_carte_version in range(len(soup_card_info)):
 
-            
-            if Go_to_next_page: # Si la page est rempli de differente version de la carte en stock, alors on va voir la page suivante
+                            etat_et_langue_carte: str = str(soup_card_info[j_carte_version].find("span", class_="variant-main-info"))
 
-                compteur_page += 1
-                if compteur_page >= 4: break # On va voir maximum la 3e page, au dela on arrete
+                            match_pour_etat_et_langue_carte = re.search(r'class="variant-short-info variant-description">([^,<]+),\s*([^,<]+),\s*([^,<]+)<', etat_et_langue_carte)
+                            etat_carte = match_pour_etat_et_langue_carte.group(1) if match_pour_etat_et_langue_carte else None
+                            langue_carte = match_pour_etat_et_langue_carte.group(2) if match_pour_etat_et_langue_carte else None
 
-                url_site: str = get_Expedition_url(carte.nom_carte, compteur_page=compteur_page)
+                            match_pour_stock_carte = re.search(r'class="variant-short-info variant-qty">\s*([0-9]+)\s*', etat_et_langue_carte)
+                            stock_carte = int(match_pour_stock_carte.group(1)) if match_pour_stock_carte else None
+
+                            card_info: str = str(soup_card_info[j_carte_version].find("form", class_="add-to-cart-form"))
+
+                            match_pour_prix = re.search(r'data-price="[^$]*\$\s*([0-9.]+)"', card_info)
+                            prix_carte = float(match_pour_prix.group(1)) if match_pour_prix else None
+
+                            df_resultat_magasin = update_df_resultat_magasin(df_resultat_magasin, ligne= compteur_instance_carte, 
+                                                                        nom_carte= nom_carte, prix_carte= prix_carte, 
+                                                                        langue_carte= langue_carte, etat_carte= etat_carte, 
+                                                                        stock_carte= stock_carte, date_recherche= date_recherche,
+                                                                        page_magasin= compteur_page, lien_carte= lien_carte) 
+
+                            compteur_instance_carte += 1
+                            if compteur_instance_carte >= 100 : break
+                
+                if Go_to_next_page: # Si la page est rempli de differente version de la carte en stock, alors on va voir la page suivante
+
+                    compteur_page += 1
+                    if compteur_page >= 4: break # On va voir maximum la 3e page, au dela on arrete
+
+                    url_site: str = get_Expedition_url(carte.nom_carte, compteur_page=compteur_page)
+
+            except requests.exceptions.RequestException as e:
+                print(f"❌ Erreur de requête pour {url_site}: {e}")
+                continue
+
+            except Exception as e:
+                print(f"❓ Erreur inconnue pour {carte.nom_carte}: {e}")
+                continue
 
         df_resultat_magasin = df_resultat_magasin[df_resultat_magasin["nom_carte"] != ""] 
         df_resultat_magasin_total = pd.concat([df_resultat_magasin_total, df_resultat_magasin], ignore_index=True)
 
     return(df_resultat_magasin_total)
-def get_prix_alt_f4(df_cartes_intrant, message_mag_placerholder, progress_placeholder, message_magasin, list_of_basic_lands):
+def get_prix_alt_f4(df_cartes_intrant, message_mag_placerholder, progress_placeholder, message_magasin, list_of_basic_lands, session):
     df_resultat_magasin_total = creat_empty_df_resultat_magasin(0)
 
     for index_df, carte in enumerate(df_cartes_intrant.itertuples()): # Boucle sur toutes les cartes dans le a chercher
@@ -298,46 +325,57 @@ def get_prix_alt_f4(df_cartes_intrant, message_mag_placerholder, progress_placeh
         compteur_page: int = 1
         compteur_instance_carte: int = 0
             
-        # Obtention de l'URL pour la carte
+        # print(carte.nom_carte, "-> page", compteur_page)
         url_site: str = get_alt_f4_ulr(carte.nom_carte)
         
-        # print(carte.nom_carte, "-> page", compteur_page)
-        page_site: requests = requests.get(url_site)
-        soup_site: BeautifulSoup = BeautifulSoup(page_site.text, features="lxml")
-        soup_all_cards: list[BeautifulSoup] = soup_site.find_all("div", class_="product-card__content grow flex flex-col justify-start text-center")
+        try:
+            # Faire la requête avec la session
+            page_site = session.get(url_site, timeout=30)
+            page_site.raise_for_status()
 
-        match_pour_date_recherche = re.search(r'([^.]+).', str(datetime.now()))
-        date_recherche = match_pour_date_recherche.group(1) if match_pour_date_recherche else None
+            soup_site: BeautifulSoup = BeautifulSoup(page_site.text, features="lxml")
+            soup_all_cards: list[BeautifulSoup] = soup_site.find_all("div", class_="product-card__content grow flex flex-col justify-start text-center")
 
-        for i in range(len(soup_all_cards)):
+            match_pour_date_recherche = re.search(r'([^.]+).', str(datetime.now()))
+            date_recherche = match_pour_date_recherche.group(1) if match_pour_date_recherche else None
 
-            card_info: BeautifulSoup = soup_all_cards[i]
-            card_name_info: str = str(card_info.find("a", class_="product-card__title reversed-link text-base-xl font-medium leading-tight"))
+            for i in range(len(soup_all_cards)):
 
-            match_pour_lien_carte = re.search(r'<a[^>]*>(.*?)</a>', card_name_info)
-            nom_carte = match_pour_lien_carte.group(1).lower() if match_pour_lien_carte else None
+                card_info: BeautifulSoup = soup_all_cards[i]
+                card_name_info: str = str(card_info.find("a", class_="product-card__title reversed-link text-base-xl font-medium leading-tight"))
 
-            Bad_card_name: bool = Is_other_named_card(nom_carte, carte.nom_carte)
-            if Bad_card_name:
-                continue
+                match_pour_lien_carte = re.search(r'<a[^>]*>(.*?)</a>', card_name_info)
+                nom_carte = match_pour_lien_carte.group(1).lower() if match_pour_lien_carte else None
 
-            match_pour_lien_carte = re.search(r'href="([^"]*)"', card_name_info)
-            lien_carte = "https://altf4online.com" + match_pour_lien_carte.group(1) if match_pour_lien_carte else None
+                Bad_card_name: bool = Is_other_named_card(nom_carte, carte.nom_carte)
+                if Bad_card_name:
+                    continue
 
-            card_price_info: str = str(card_info.find("div", class_="price flex flex-wrap lg:flex-col lg:items-end gap-2 md:gap-1d5"))
+                match_pour_lien_carte = re.search(r'href="([^"]*)"', card_name_info)
+                lien_carte = "https://altf4online.com" + match_pour_lien_carte.group(1) if match_pour_lien_carte else None
 
-            match_pour_lien_carte = re.search(r'<span[^>]*>\$(.*?)</span>', card_price_info)
-            prix_carte = float(match_pour_lien_carte.group(1)) if match_pour_lien_carte else None
+                card_price_info: str = str(card_info.find("div", class_="price flex flex-wrap lg:flex-col lg:items-end gap-2 md:gap-1d5"))
 
-            df_resultat_magasin = update_df_resultat_magasin(df_resultat_magasin, ligne= compteur_instance_carte, 
-                                                                    nom_carte= nom_carte, prix_carte= prix_carte, 
-                                                                    langue_carte= "Indisponible", etat_carte= "Indisponible", 
-                                                                    stock_carte= 1, date_recherche= date_recherche,
-                                                                    page_magasin= compteur_page, lien_carte= lien_carte) 
-            
-            compteur_instance_carte += 1
-            if compteur_instance_carte >= 100 : break
+                match_pour_lien_carte = re.search(r'<span[^>]*>\$(.*?)</span>', card_price_info)
+                prix_carte = float(match_pour_lien_carte.group(1)) if match_pour_lien_carte else None
 
+                df_resultat_magasin = update_df_resultat_magasin(df_resultat_magasin, ligne= compteur_instance_carte, 
+                                                                        nom_carte= nom_carte, prix_carte= prix_carte, 
+                                                                        langue_carte= "Indisponible", etat_carte= "Indisponible", 
+                                                                        stock_carte= 1, date_recherche= date_recherche,
+                                                                        page_magasin= compteur_page, lien_carte= lien_carte) 
+                
+                compteur_instance_carte += 1
+                if compteur_instance_carte >= 100 : break
+
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Erreur de requête pour {url_site}: {e}")
+            continue
+
+        except Exception as e:
+            print(f"❓ Erreur inconnue pour {carte.nom_carte}: {e}")
+            continue
+    
         df_resultat_magasin = df_resultat_magasin[df_resultat_magasin["nom_carte"] != ""] 
         df_resultat_magasin_total = pd.concat([df_resultat_magasin_total, df_resultat_magasin], ignore_index=True)
 
@@ -372,16 +410,15 @@ def ui_progression_scrapping(message_mag_placerholder, progress_placeholder, mes
         st.write(f"**{row.nom_carte} ({index + 1} / {len(df)})**")
         st.progress((index + 1) / len(df))
 
-
 # APP ---------------------------------------------------------------------------------------------------------------------------
+
+list_of_basic_lands = ["plains", "island", "swamp", "mountain", "forest", "wastes"]
 
 st.set_page_config(
     page_title="Imporation",
     page_icon="ℹ️",
     layout="wide"
 )
-
-list_of_basic_lands = ["plains", "island", "swamp", "mountain", "forest", "wastes"]
 
 st.title("Importation")
 
@@ -414,7 +451,7 @@ if st.button("Verification de la liste de cartes"):
 
     st.write("La liste de cartes :") 
     df_cartes_intrant = separation_intrant_carte(text_cartes_brut)
-    st.dataframe(df_cartes_intrant)
+    st.dataframe(df_cartes_intrant, use_container_width=True)
 
 st.divider()
 
@@ -436,17 +473,34 @@ if st.button("Lancer la recherche !"):
 
     df_cartes_intrant = separation_intrant_carte(text_cartes_brut)
 
-    df_resultat_magasin_total = get_prix_du_valet_de_coeur(df_cartes_intrant, message_mag_placerholder, progress_placeholder, "Visite du Valet de Coeur :", list_of_basic_lands)
-    progress_placeholder.info("🔄 Sauvegarde des trouvailles...")
-    sauvegarder_donnees_magasin(url, key, df_cartes_intrant, df_resultat_magasin_total, "inventaire_VdC")
+    session = requests.Session()
+    retry = Retry(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=[500, 502, 503, 504]
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
 
-    df_resultat_magasin_total = get_prix_de_l_expedition(df_cartes_intrant, message_mag_placerholder, progress_placeholder, "Visite de l'Expedition :", list_of_basic_lands)
-    progress_placeholder.info("🔄 Sauvegarde des trouvailles...")
-    sauvegarder_donnees_magasin(url, key, df_cartes_intrant, df_resultat_magasin_total, "inventaire_Expedition")
+    try :
+        df_resultat_magasin_total = get_prix_du_valet_de_coeur(df_cartes_intrant, message_mag_placerholder, progress_placeholder, 
+                                                               "Visite du Valet de Coeur :", list_of_basic_lands, session)
+        progress_placeholder.info("🔄 Sauvegarde des trouvailles...")
+        sauvegarder_donnees_magasin(url, key, df_cartes_intrant, df_resultat_magasin_total, "inventaire_VdC")
 
-    df_resultat_magasin_total = get_prix_alt_f4(df_cartes_intrant, message_mag_placerholder, progress_placeholder, "Visite de Alt F4 :", list_of_basic_lands)
-    progress_placeholder.info("🔄 Sauvegarde des trouvailles...")
-    sauvegarder_donnees_magasin(url, key, df_cartes_intrant, df_resultat_magasin_total, "inventaire_Alt_F4")
+        df_resultat_magasin_total = get_prix_de_l_expedition(df_cartes_intrant, message_mag_placerholder, progress_placeholder, 
+                                                             "Visite de l'Expedition :", list_of_basic_lands, session)
+        progress_placeholder.info("🔄 Sauvegarde des trouvailles...")
+        sauvegarder_donnees_magasin(url, key, df_cartes_intrant, df_resultat_magasin_total, "inventaire_Expedition")
+
+        df_resultat_magasin_total = get_prix_alt_f4(df_cartes_intrant, message_mag_placerholder, progress_placeholder, 
+                                                    "Visite de Alt F4 :", list_of_basic_lands, session)
+        progress_placeholder.info("🔄 Sauvegarde des trouvailles...")
+        sauvegarder_donnees_magasin(url, key, df_cartes_intrant, df_resultat_magasin_total, "inventaire_Alt_F4")
+
+    finally:
+        session.close()
 
     message_mag_placerholder.empty()
     progress_placeholder.success("✅ Algorithme terminé !")

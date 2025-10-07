@@ -26,9 +26,9 @@ def get_all_databases(supabase):
     return(df_all_data)
 def filtrer_les_cartes_par_quantite(df_carte, carte):
     if len(df_carte) > 0:
-        somme_cumulative = df_carte['stock_carte'].cumsum()
 
-        total_carte_disponible = somme_cumulative.argmax()
+        somme_cumulative = df_carte['stock_carte'].cumsum()
+        total_carte_disponible = df_carte['stock_carte'].sum()
 
         if total_carte_disponible < carte.quantite:
             # si la carte est dispo mais on manque de stock
@@ -73,6 +73,7 @@ def filtrer_les_cartes_par_quantite(df_carte, carte):
 
     return(df_carte)
 def get_prices_in_stores(df_cartes_intrant, list_magasin_intrant, df_all_data, list_of_basic_lands):
+    
     df_ordre_magasin = pd.DataFrame({
         'nom_magasin': list_magasin_intrant,
         'priorite_mag': range(len(list_magasin_intrant))
