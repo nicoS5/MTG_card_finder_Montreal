@@ -5,10 +5,10 @@ from bs4 import BeautifulSoup
 import requests
 from datetime import datetime
 from supabase import create_client
-
+import pytz
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-import time
+import math 
 
 
 # Functions ---------------------------------------------------------------------------------------------------------------------
@@ -35,9 +35,14 @@ def separation_intrant_carte(intrant):
     
     if(len(list_cartes) <= 0): return(pd.DataFrame(columns=['nom_carte', 'quantite']))
 
-    return(pd.DataFrame(list_cartes))
+    return(pd.DataFrame(list_cartes).sort_values(["nom_carte"], ascending= [True]))
 def Is_other_named_card(card_store_name: str, card_name: str):
+
     Bad_card_name: bool = card_store_name.find(card_name) < 0
+    Bad_card_name: bool = Bad_card_name or card_store_name.find("art card") >= 0
+    Bad_card_name: bool = Bad_card_name or card_store_name.find("double-sided token") >= 0
+    # Bad_card_name: bool = Bad_card_name or card_store_name.find("display commander - thick stock") >= 0
+    # Bad_card_name: bool = Bad_card_name or card_store_name[2:3] == "/"
 
     return Bad_card_name
 def creat_empty_df_resultat_magasin(nb_ligne, nom_magasin = ""):
@@ -115,7 +120,8 @@ def get_prix_du_valet_de_coeur(df_cartes_intrant, message_mag_placerholder, prog
 
                 soup_site: BeautifulSoup = BeautifulSoup(page_site.text, features="lxml")
 
-                match_pour_date_recherche = re.search(r'([^.]+).', str(datetime.now()))
+                fuseau_horaire_montreal = pytz.timezone('America/Montreal') 
+                match_pour_date_recherche = re.search(r'([^.]+).', str(datetime.now(fuseau_horaire_montreal)))
                 date_recherche = match_pour_date_recherche.group(1) if match_pour_date_recherche else None
 
                 soup_card_container: BeautifulSoup = soup_site.find("ul", class_="products")
@@ -226,11 +232,11 @@ def get_prix_de_l_expedition(df_cartes_intrant, message_mag_placerholder, progre
 
                 soup_site: BeautifulSoup = BeautifulSoup(page_site.text, features="lxml")
 
-                match_pour_date_recherche = re.search(r'([^.]+).', str(datetime.now()))
+                fuseau_horaire_montreal = pytz.timezone('America/Montreal') 
+                match_pour_date_recherche = re.search(r'([^.]+).', str(datetime.now(fuseau_horaire_montreal)))
                 date_recherche = match_pour_date_recherche.group(1) if match_pour_date_recherche else None
 
                 soup_card_container: BeautifulSoup = soup_site.find("ul", class_="products")
-                if soup_card_container == None: print(url_site)
                 if soup_card_container == None: break
 
                 soup_all_cards: list[BeautifulSoup] = soup_card_container.find_all("li") 
@@ -336,7 +342,8 @@ def get_prix_alt_f4(df_cartes_intrant, message_mag_placerholder, progress_placeh
             soup_site: BeautifulSoup = BeautifulSoup(page_site.text, features="lxml")
             soup_all_cards: list[BeautifulSoup] = soup_site.find_all("div", class_="product-card__content grow flex flex-col justify-start text-center")
 
-            match_pour_date_recherche = re.search(r'([^.]+).', str(datetime.now()))
+            fuseau_horaire_montreal = pytz.timezone('America/Montreal') 
+            match_pour_date_recherche = re.search(r'([^.]+).', str(datetime.now(fuseau_horaire_montreal)))
             date_recherche = match_pour_date_recherche.group(1) if match_pour_date_recherche else None
 
             for i in range(len(soup_all_cards)):
@@ -409,10 +416,59 @@ def ui_progression_scrapping(message_mag_placerholder, progress_placeholder, mes
     with progress_placeholder.container():
         st.write(f"**{row.nom_carte} ({index + 1} / {len(df)})**")
         st.progress((index + 1) / len(df))
+def get_all_databases(supabase):
 
+    df_all_data = pd.concat([get_all_data_from_magasin(supabase, "inventaire_VdC"),
+                            get_all_data_from_magasin(supabase, "inventaire_Expedition"),
+                            get_all_data_from_magasin(supabase, "inventaire_Alt_F4")],
+                            ignore_index= True)
+    df_all_data = df_all_data[df_all_data["etat_carte"] != "OoS"]
+
+    return(df_all_data)
+def get_all_data_from_magasin(supabase, nom_table_magasin):
+    all_data_magasin = []
+    page_size = 1000
+    offset = 0
+
+    while True:
+        response = supabase.table(nom_table_magasin).select('*').neq('etat_carte', 'OoS').range(offset, offset + page_size - 1).execute()
+        
+        if not response.data: break
+        
+        all_data_magasin.extend(response.data)
+        
+        if len(response.data) < page_size: break
+        
+        offset += page_size
+
+    return(pd.DataFrame(all_data_magasin))
+def get_derniere_recherche_carte(df_cartes_intrant):
+    date_de_derniere_recherche = []
+    for index_carte, carte in enumerate(df_cartes_intrant.itertuples()):
+
+        df_carte = df_all_data[df_all_data["nom_carte"].apply(lambda x: not(Is_other_named_card(x, carte.nom_carte)))]
+
+        if df_carte.shape[0] == 0: date_de_derniere_recherche.append("jamais_trouvee")
+        else: date_de_derniere_recherche.append(df_carte["date_recherche"].max())
+
+    return(date_de_derniere_recherche)
+def mettrer_a_jour_les_cartes_non_trouvee(carte_non_trouve, df_resultat_magasin_total):
+    carte_non_trouve_magasin = []
+    for index_carte, carte in enumerate(df_cartes_intrant.itertuples()):
+
+        df_carte = df_resultat_magasin_total[df_resultat_magasin_total["nom_carte"].apply(lambda x: not(Is_other_named_card(x, carte.nom_carte)))]
+
+        if df_carte.shape[0] == 0: carte_non_trouve_magasin.append(carte.nom_carte)
+
+    return(carte_non_trouve[carte_non_trouve['nom_carte'].isin(carte_non_trouve_magasin)])
 # APP ---------------------------------------------------------------------------------------------------------------------------
 
 list_of_basic_lands = ["plains", "island", "swamp", "mountain", "forest", "wastes"]
+temps_recherche_carte =  10 # seconde
+
+url: str = st.secrets["supabase"]["SUPABASE_URL"]
+key: str  = st.secrets["supabase"]["SUPABASE_KEY"]
+supabase = create_client(url, key)
 
 st.set_page_config(
     page_title="Imporation",
@@ -449,9 +505,29 @@ Verifiez grace a ce bouton que toutes les cartes ont bien ete entrees :
 
 if st.button("Verification de la liste de cartes"):
 
-    st.write("La liste de cartes :") 
+    df_all_data = get_all_databases(supabase)
+
     df_cartes_intrant = separation_intrant_carte(text_cartes_brut)
-    st.dataframe(df_cartes_intrant, use_container_width=True)
+    df_cartes_intrant["derniere_recherche"] = get_derniere_recherche_carte(df_cartes_intrant)
+
+    df_cartes_intrant_jamais_trouvee = df_cartes_intrant[df_cartes_intrant["derniere_recherche"] == "jamais_trouvee"]
+    df_cartes_intrant_jamais_trouvee = df_cartes_intrant_jamais_trouvee.reset_index(drop=True)
+    df_cartes_intrant_jamais_trouvee.index = df_cartes_intrant_jamais_trouvee.index + 1
+
+    df_cartes_intrant_deja_trouvee = df_cartes_intrant[df_cartes_intrant["derniere_recherche"] != "jamais_trouvee"]
+    df_cartes_intrant_deja_trouvee = df_cartes_intrant_deja_trouvee.reset_index(drop=True)
+    df_cartes_intrant_deja_trouvee.index = df_cartes_intrant_deja_trouvee.index + 1
+
+    st.write("Quantite de carte total dans la liste :", df_cartes_intrant["quantite"].sum(), 
+             ". Nombre de carte unique :", df_cartes_intrant.shape[0],
+             ". Nombre de carte jamais trouvee :", df_cartes_intrant_jamais_trouvee.shape[0],
+             ". Temps estime pour rechercher", df_cartes_intrant.shape[0], "cartes : ", math.ceil(df_cartes_intrant.shape[0]*temps_recherche_carte/60), "min.")
+    
+    st.write("La liste de cartes jamais trouvees :") 
+    st.dataframe(df_cartes_intrant_jamais_trouvee, use_container_width=True)
+
+    st.write("La liste de cartes trouvees lors d'anciennes recherches:") 
+    st.dataframe(df_cartes_intrant_deja_trouvee, use_container_width=True)
 
 st.divider()
 
@@ -462,16 +538,13 @@ st.markdown(
 Si tout est bon, c'est parti pour la recherche des cartes :
 """)
 
-# Lancement de la recherche de prix dans les magasins
 if st.button("Lancer la recherche !"):
-
-    url: str = st.secrets["supabase"]["SUPABASE_URL"]
-    key: str  = st.secrets["supabase"]["SUPABASE_KEY"]
 
     message_mag_placerholder = st.empty()
     progress_placeholder = st.empty()
 
     df_cartes_intrant = separation_intrant_carte(text_cartes_brut)
+    df_carte_non_trouvee = df_cartes_intrant
 
     session = requests.Session()
     retry = Retry(
@@ -482,20 +555,24 @@ if st.button("Lancer la recherche !"):
     adapter = HTTPAdapter(max_retries=retry)
     session.mount('http://', adapter)
     session.mount('https://', adapter)
+    
 
     try :
         df_resultat_magasin_total = get_prix_du_valet_de_coeur(df_cartes_intrant, message_mag_placerholder, progress_placeholder, 
                                                                "Visite du Valet de Coeur :", list_of_basic_lands, session)
+        df_carte_non_trouvee = mettrer_a_jour_les_cartes_non_trouvee(df_carte_non_trouvee, df_resultat_magasin_total)
         progress_placeholder.info("🔄 Sauvegarde des trouvailles...")
         sauvegarder_donnees_magasin(url, key, df_cartes_intrant, df_resultat_magasin_total, "inventaire_VdC")
 
         df_resultat_magasin_total = get_prix_de_l_expedition(df_cartes_intrant, message_mag_placerholder, progress_placeholder, 
                                                              "Visite de l'Expedition :", list_of_basic_lands, session)
+        df_carte_non_trouvee = mettrer_a_jour_les_cartes_non_trouvee(df_carte_non_trouvee, df_resultat_magasin_total)
         progress_placeholder.info("🔄 Sauvegarde des trouvailles...")
         sauvegarder_donnees_magasin(url, key, df_cartes_intrant, df_resultat_magasin_total, "inventaire_Expedition")
 
         df_resultat_magasin_total = get_prix_alt_f4(df_cartes_intrant, message_mag_placerholder, progress_placeholder, 
                                                     "Visite de Alt F4 :", list_of_basic_lands, session)
+        df_carte_non_trouvee = mettrer_a_jour_les_cartes_non_trouvee(df_carte_non_trouvee, df_resultat_magasin_total)
         progress_placeholder.info("🔄 Sauvegarde des trouvailles...")
         sauvegarder_donnees_magasin(url, key, df_cartes_intrant, df_resultat_magasin_total, "inventaire_Alt_F4")
 
@@ -504,5 +581,12 @@ if st.button("Lancer la recherche !"):
 
     message_mag_placerholder.empty()
     progress_placeholder.success("✅ Algorithme terminé !")
+
+    df_carte_non_trouvee = df_carte_non_trouvee.reset_index(drop=True)
+    df_carte_non_trouvee.index = df_carte_non_trouvee.index + 1
+
+    st.write("Nombre de carte non trouvee :", df_carte_non_trouvee.shape[0])
+    st.write("La liste de cartes non trouvees lors de la recherche :") 
+    st.dataframe(df_carte_non_trouvee, use_container_width=True)
 
 st.caption("© 2025 - MTG Card Finder Montreal")

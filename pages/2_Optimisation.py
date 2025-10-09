@@ -154,7 +154,7 @@ def separation_intrant_carte(intrant):
     
     if(len(list_cartes) <= 0): return(pd.DataFrame(columns=['nom_carte', 'quantite']))
 
-    return(pd.DataFrame(list_cartes))
+    return(pd.DataFrame(list_cartes).sort_values(["nom_carte"], ascending= [True]))
 
 # APP --------------------------------------------------------------------------------------------------------------
 
@@ -276,45 +276,50 @@ if st.button("Lancer une recherche de prix"):
     df_trouvailles["id"] = range(1, len(df_trouvailles)+1)
     df_trouvailles = df_trouvailles[["id",
                                      "nom_carte",
-                                    "prix_carte",
-                                    "info_carte",
-                                    "stock_carte",
-                                    "lien_carte",
-                                    "page_magasin",
-                                    "date_recherche",
-                                    "nom_magasin"]]
+                                     "prix_carte",
+                                     "info_carte",
+                                     "stock_carte",
+                                     "lien_carte",
+                                     "page_magasin",
+                                     "date_recherche",
+                                     "nom_magasin"]]
 
     if len(st.session_state.list_magasins_ouverts) >= 1:
-        df_a_afficher = df_trouvailles[df_trouvailles["nom_magasin"] == st.session_state.list_magasins_ouverts[0]].drop(columns=["nom_magasin"])
-        df_a_afficher["id"] = range(1, len(df_a_afficher)+1)
+        df_a_afficher = df_trouvailles[df_trouvailles["nom_magasin"] == st.session_state.list_magasins_ouverts[0]].drop(columns=["nom_magasin", "id"])
+        df_a_afficher = df_a_afficher.reset_index(drop=True)
+        df_a_afficher.index = df_a_afficher.index + 1
 
         st.write(st.session_state.list_magasins_ouverts[0], ": (", df_a_afficher["stock_carte"].sum(), "cartes a ", round((df_a_afficher["prix_carte"]*df_a_afficher["stock_carte"]).sum(), 2), "$)")
-        st.dataframe(df_a_afficher, hide_index= True, use_container_width=True)
+        st.dataframe(df_a_afficher, use_container_width=True)
 
     if len(st.session_state.list_magasins_ouverts) >= 2:
-        df_a_afficher = df_trouvailles[df_trouvailles["nom_magasin"] == st.session_state.list_magasins_ouverts[1]].drop(columns=["nom_magasin"])
-        df_a_afficher["id"] = range(1, len(df_a_afficher)+1)
+        df_a_afficher = df_trouvailles[df_trouvailles["nom_magasin"] == st.session_state.list_magasins_ouverts[1]].drop(columns=["nom_magasin", "id"])
+        df_a_afficher = df_a_afficher.reset_index(drop=True)
+        df_a_afficher.index = df_a_afficher.index + 1
 
         st.write(st.session_state.list_magasins_ouverts[1], ": (", df_a_afficher["stock_carte"].sum(), "cartes a ", round((df_a_afficher["prix_carte"]*df_a_afficher["stock_carte"]).sum(), 2), "$)")
-        st.dataframe(df_a_afficher, hide_index= True, use_container_width=True)
+        st.dataframe(df_a_afficher, use_container_width=True)
 
     if len(st.session_state.list_magasins_ouverts) >= 3:
-        df_a_afficher = df_trouvailles[df_trouvailles["nom_magasin"] == st.session_state.list_magasins_ouverts[2]].drop(columns=["nom_magasin"])
-        df_a_afficher["id"] = range(1, len(df_a_afficher)+1)
+        df_a_afficher = df_trouvailles[df_trouvailles["nom_magasin"] == st.session_state.list_magasins_ouverts[2]].drop(columns=["nom_magasin", "id"])
+        df_a_afficher = df_a_afficher.reset_index(drop=True)
+        df_a_afficher.index = df_a_afficher.index + 1
 
         st.write(st.session_state.list_magasins_ouverts[2], ": (", df_a_afficher["stock_carte"].sum(), "cartes a ", round((df_a_afficher["prix_carte"]*df_a_afficher["stock_carte"]).sum(), 2), "$)")
-        st.dataframe(df_a_afficher, hide_index= True, use_container_width=True)
+        st.dataframe(df_a_afficher, use_container_width=True)
 
-    df_a_afficher = df_trouvailles[df_trouvailles["nom_magasin"] == "lands"].drop(columns=["nom_magasin"])
-    df_a_afficher["id"] = range(1, len(df_a_afficher)+1)
+    df_a_afficher = df_trouvailles[df_trouvailles["nom_magasin"] == "lands"].drop(columns=["nom_magasin", "id"])
+    df_a_afficher = df_a_afficher.reset_index(drop=True)
+    df_a_afficher.index = df_a_afficher.index + 1
 
     st.write("Basic lands : (", df_a_afficher["stock_carte"].sum(), " lands a ", round((df_a_afficher["prix_carte"]*df_a_afficher["stock_carte"]).sum(), 2), "$)")
-    st.dataframe(df_a_afficher, hide_index= True, use_container_width=True)
+    st.dataframe(df_a_afficher, use_container_width=True)
 
-    df_a_afficher = df_trouvailles[df_trouvailles["nom_magasin"] == "Indisponible"].drop(columns=["nom_magasin"])
-    df_a_afficher["id"] = range(1, len(df_a_afficher)+1)
+    df_a_afficher = df_trouvailles[df_trouvailles["nom_magasin"] == "Indisponible"].drop(columns=["nom_magasin", "id"])
+    df_a_afficher = df_a_afficher.reset_index(drop=True)
+    df_a_afficher.index = df_a_afficher.index + 1
 
     st.write("Cartes non trouvees : ", df_a_afficher["stock_carte"].sum())
-    st.dataframe(df_a_afficher, hide_index= True, use_container_width=True)
+    st.dataframe(df_a_afficher, use_container_width=True)
 
 st.caption("© 2025 - MTG Card Finder Montreal")
