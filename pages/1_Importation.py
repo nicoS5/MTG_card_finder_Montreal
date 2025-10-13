@@ -557,7 +557,7 @@ def make_session_connection_site():
 # APP ---------------------------------------------------------------------------------------------------------------------------
 
 list_of_basic_lands = ["plains", "island", "swamp", "mountain", "forest", "wastes"]
-temps_recherche_carte =  10 # seconde
+temps_recherche_carte =  7 # seconde
 
 url: str = st.secrets["supabase"]["SUPABASE_URL"]
 key: str  = st.secrets["supabase"]["SUPABASE_KEY"]
