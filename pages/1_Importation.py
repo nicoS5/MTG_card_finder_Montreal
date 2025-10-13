@@ -28,8 +28,19 @@ def separation_intrant_carte(intrant):
         separation = re.match(r"^(\d+)\s+(.+)$", ligne)
 
         if separation :
+
             quantite = int(separation.group(1))
+            if quantite < 0:
+                quantite = -1
+
             nom_carte = separation.group(2).strip().lower()
+
+            list_cartes.append({"nom_carte": nom_carte,
+                                "quantite": quantite})
+        
+        else :
+            quantite = -1
+            nom_carte = ligne
             list_cartes.append({"nom_carte": nom_carte,
                                 "quantite": quantite})
     
@@ -387,7 +398,7 @@ def get_prix_alt_f4(df_cartes_intrant, message_mag_placerholder, progress_placeh
         df_resultat_magasin_total = pd.concat([df_resultat_magasin_total, df_resultat_magasin], ignore_index=True)
 
     return(df_resultat_magasin_total)
-def sauvegarder_donnees_magasin(url, key, df_cartes_intrant, nouvelle_data, nom_table):
+def sauvegarder_donnees_magasin(supabase, df_cartes_intrant, nouvelle_data, nom_table):
 
     for index_df, carte in enumerate(df_cartes_intrant.itertuples()):
 
@@ -395,9 +406,22 @@ def sauvegarder_donnees_magasin(url, key, df_cartes_intrant, nouvelle_data, nom_
 
         if len(nouvelle_data_carte):
 
-            supabase = create_client(url, key)
-            response = supabase.table(nom_table).select('id_carte, nom_carte').execute()
-            data_en_ligne = pd.DataFrame(response.data)
+            all_data_magasin = []
+            page_size = 1000
+            offset = 0
+
+            while True:
+                response = supabase.table(nom_table).select('id_carte, nom_carte').range(offset, offset + page_size - 1).execute()
+                
+                if not response.data: break
+                
+                all_data_magasin.extend(response.data)
+                
+                if len(response.data) < page_size: break
+                
+                offset += page_size
+
+            data_en_ligne = pd.DataFrame(all_data_magasin)
             data_en_ligne = data_en_ligne[data_en_ligne["nom_carte"].apply(lambda x: not(Is_other_named_card(x, carte.nom_carte)))]
             data_to_delete = data_en_ligne["id_carte"].to_list()
 
@@ -442,9 +466,14 @@ def get_all_data_from_magasin(supabase, nom_table_magasin):
         offset += page_size
 
     return(pd.DataFrame(all_data_magasin))
-def get_derniere_recherche_carte(df_cartes_intrant):
+def get_derniere_recherche_carte(df_cartes_intrant, supabase, list_of_basic_lands):
+    df_all_data = get_all_databases(supabase)
     date_de_derniere_recherche = []
     for index_carte, carte in enumerate(df_cartes_intrant.itertuples()):
+
+        if carte.nom_carte in list_of_basic_lands:
+            date_de_derniere_recherche.append("land")
+            continue
 
         df_carte = df_all_data[df_all_data["nom_carte"].apply(lambda x: not(Is_other_named_card(x, carte.nom_carte)))]
 
@@ -461,6 +490,70 @@ def mettrer_a_jour_les_cartes_non_trouvee(carte_non_trouve, df_resultat_magasin_
         if df_carte.shape[0] == 0: carte_non_trouve_magasin.append(carte.nom_carte)
 
     return(carte_non_trouve[carte_non_trouve['nom_carte'].isin(carte_non_trouve_magasin)])
+def verifier_la_liste_de_carte(df_cartes_intrant, supabase, afficher_ui = False):
+
+    df_cartes_intrant_non_reconnue = df_cartes_intrant[df_cartes_intrant["quantite"] < 1].sort_values(["quantite", "nom_carte"], ascending= [True, True])
+    df_cartes_intrant_non_reconnue = df_cartes_intrant_non_reconnue.reset_index(drop=True)
+    df_cartes_intrant_non_reconnue.index = df_cartes_intrant_non_reconnue.index + 1
+
+    df_cartes_intrant_doublon = df_cartes_intrant[df_cartes_intrant.duplicated(subset=['nom_carte'], keep=False)].sort_values(["nom_carte", "quantite"], ascending= [True, True])
+    df_cartes_intrant_doublon.index = df_cartes_intrant_doublon.index + 1
+
+    df_cartes_intrant = df_cartes_intrant[df_cartes_intrant["quantite"] >= 1].reset_index(drop=True)
+    df_cartes_intrant["derniere_recherche"] = get_derniere_recherche_carte(df_cartes_intrant, supabase, list_of_basic_lands)
+
+    df_cartes_intrant_jamais_trouvee = df_cartes_intrant[df_cartes_intrant["derniere_recherche"] == "jamais_trouvee"].sort_values(["nom_carte"], ascending= [True])
+    df_cartes_intrant_jamais_trouvee = df_cartes_intrant_jamais_trouvee.reset_index(drop=True)
+    df_cartes_intrant_jamais_trouvee.index = df_cartes_intrant_jamais_trouvee.index + 1
+
+    df_cartes_intrant_lands = df_cartes_intrant[df_cartes_intrant["derniere_recherche"] == "land"].sort_values(["nom_carte"], ascending= [True])
+    df_cartes_intrant_lands = df_cartes_intrant_lands.reset_index(drop=True)
+    df_cartes_intrant_lands.index = df_cartes_intrant_lands.index + 1
+
+    df_cartes_intrant_deja_trouvee = df_cartes_intrant[~df_cartes_intrant["derniere_recherche"].isin(["jamais_trouvee", "land"])].sort_values(["nom_carte"], ascending= [True])
+    df_cartes_intrant_deja_trouvee = df_cartes_intrant_deja_trouvee.reset_index(drop=True)
+    df_cartes_intrant_deja_trouvee.index = df_cartes_intrant_deja_trouvee.index + 1
+
+    if afficher_ui:
+        if df_cartes_intrant_non_reconnue.shape[0] > 0:
+            st.error("❌ Certaines cartes n'ont pas ete reconnues ou seront skiper par l'algo :")
+            st.dataframe(df_cartes_intrant_non_reconnue, use_container_width=True)
+
+        if df_cartes_intrant_doublon.shape[0] > 0:
+            st.warning("⚠️ Certaines cartes sont en double dans la liste de carte :")
+            st.dataframe(df_cartes_intrant_doublon, use_container_width=True)
+
+        st.success("✅ Cartes verifiees :")
+        st.write("Quantite de carte total dans la liste :", df_cartes_intrant["quantite"].sum(), 
+                ". Nombre de carte unique :", df_cartes_intrant.shape[0],
+                ". Nombre de carte jamais trouvee :", df_cartes_intrant_jamais_trouvee.shape[0],
+                ". Temps estime pour rechercher", df_cartes_intrant.shape[0], "cartes : ", math.ceil(df_cartes_intrant.shape[0]*temps_recherche_carte/60), "min.")
+
+        if df_cartes_intrant_jamais_trouvee.shape[0] > 0:
+            st.write("La liste de cartes encore jamais trouvees :") 
+            st.dataframe(df_cartes_intrant_jamais_trouvee, use_container_width=True)
+
+        if df_cartes_intrant_deja_trouvee.shape[0] > 0:
+            st.write("La liste de cartes trouvees lors d'anciennes recherches :") 
+            st.dataframe(df_cartes_intrant_deja_trouvee, use_container_width=True)
+
+        if df_cartes_intrant_lands.shape[0] > 0:
+            st.write("La liste de basic lands :") 
+            st.dataframe(df_cartes_intrant_lands, use_container_width=True)
+def make_session_connection_site():
+    session = requests.Session()
+
+    retry = Retry(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=[500, 502, 503, 504]
+    )
+
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+
+    return(session)
 # APP ---------------------------------------------------------------------------------------------------------------------------
 
 list_of_basic_lands = ["plains", "island", "swamp", "mountain", "forest", "wastes"]
@@ -485,14 +578,15 @@ st.header("Liste de cartes :")
 st.markdown(
 """
 Entrez la liste de cartes a chercher ci-dessous :
-""")
+"""
+)
 
 text_cartes_brut = st.text_area(
     label = "Liste de cartes Magic :",
     label_visibility= "hidden",
     value = "",
-    placeholder = "Copier coller la quantite et le noms des cartes sous ce format :\n1 sol ring\n1 arcane signet\n...")
-
+    placeholder = "Copier coller la quantite et le noms des cartes sous ce format :\n1 sol ring\n1 arcane signet\n..."
+)
 
 st.divider()
 
@@ -501,33 +595,13 @@ st.header("Verification de la liste :")
 st.markdown(
 """
 Verifiez grace a ce bouton que toutes les cartes ont bien ete entrees :
-""")
+"""
+)
 
 if st.button("Verification de la liste de cartes"):
 
-    df_all_data = get_all_databases(supabase)
-
-    df_cartes_intrant = separation_intrant_carte(text_cartes_brut)
-    df_cartes_intrant["derniere_recherche"] = get_derniere_recherche_carte(df_cartes_intrant)
-
-    df_cartes_intrant_jamais_trouvee = df_cartes_intrant[df_cartes_intrant["derniere_recherche"] == "jamais_trouvee"]
-    df_cartes_intrant_jamais_trouvee = df_cartes_intrant_jamais_trouvee.reset_index(drop=True)
-    df_cartes_intrant_jamais_trouvee.index = df_cartes_intrant_jamais_trouvee.index + 1
-
-    df_cartes_intrant_deja_trouvee = df_cartes_intrant[df_cartes_intrant["derniere_recherche"] != "jamais_trouvee"]
-    df_cartes_intrant_deja_trouvee = df_cartes_intrant_deja_trouvee.reset_index(drop=True)
-    df_cartes_intrant_deja_trouvee.index = df_cartes_intrant_deja_trouvee.index + 1
-
-    st.write("Quantite de carte total dans la liste :", df_cartes_intrant["quantite"].sum(), 
-             ". Nombre de carte unique :", df_cartes_intrant.shape[0],
-             ". Nombre de carte jamais trouvee :", df_cartes_intrant_jamais_trouvee.shape[0],
-             ". Temps estime pour rechercher", df_cartes_intrant.shape[0], "cartes : ", math.ceil(df_cartes_intrant.shape[0]*temps_recherche_carte/60), "min.")
-    
-    st.write("La liste de cartes jamais trouvees :") 
-    st.dataframe(df_cartes_intrant_jamais_trouvee, use_container_width=True)
-
-    st.write("La liste de cartes trouvees lors d'anciennes recherches:") 
-    st.dataframe(df_cartes_intrant_deja_trouvee, use_container_width=True)
+    df_cartes_intrant: pd.DataFrame = separation_intrant_carte(text_cartes_brut)
+    verifier_la_liste_de_carte(df_cartes_intrant, supabase, afficher_ui = True)
 
 st.divider()
 
@@ -536,7 +610,8 @@ st.header("Lancer la recherche :")
 st.markdown(
 """
 Si tout est bon, c'est parti pour la recherche des cartes :
-""")
+"""
+)
 
 if st.button("Lancer la recherche !"):
 
@@ -544,49 +619,48 @@ if st.button("Lancer la recherche !"):
     progress_placeholder = st.empty()
 
     df_cartes_intrant = separation_intrant_carte(text_cartes_brut)
+    df_cartes_intrant = df_cartes_intrant[~df_cartes_intrant["nom_carte"].isin(list_of_basic_lands)]
+
     df_carte_non_trouvee = df_cartes_intrant
 
-    session = requests.Session()
-    retry = Retry(
-        total=3,
-        backoff_factor=1,
-        status_forcelist=[500, 502, 503, 504]
-    )
-    adapter = HTTPAdapter(max_retries=retry)
-    session.mount('http://', adapter)
-    session.mount('https://', adapter)
-    
+    df_cartes_intrant = df_cartes_intrant[df_cartes_intrant["quantite"] >= 1].groupby('nom_carte', as_index = False)['quantite'].sum()
 
+    session = make_session_connection_site()
+    
     try :
         df_resultat_magasin_total = get_prix_du_valet_de_coeur(df_cartes_intrant, message_mag_placerholder, progress_placeholder, 
                                                                "Visite du Valet de Coeur :", list_of_basic_lands, session)
         df_carte_non_trouvee = mettrer_a_jour_les_cartes_non_trouvee(df_carte_non_trouvee, df_resultat_magasin_total)
         progress_placeholder.info("🔄 Sauvegarde des trouvailles...")
-        sauvegarder_donnees_magasin(url, key, df_cartes_intrant, df_resultat_magasin_total, "inventaire_VdC")
+        sauvegarder_donnees_magasin(supabase, df_cartes_intrant, df_resultat_magasin_total, "inventaire_VdC")
 
         df_resultat_magasin_total = get_prix_de_l_expedition(df_cartes_intrant, message_mag_placerholder, progress_placeholder, 
                                                              "Visite de l'Expedition :", list_of_basic_lands, session)
         df_carte_non_trouvee = mettrer_a_jour_les_cartes_non_trouvee(df_carte_non_trouvee, df_resultat_magasin_total)
         progress_placeholder.info("🔄 Sauvegarde des trouvailles...")
-        sauvegarder_donnees_magasin(url, key, df_cartes_intrant, df_resultat_magasin_total, "inventaire_Expedition")
+        sauvegarder_donnees_magasin(supabase, df_cartes_intrant, df_resultat_magasin_total, "inventaire_Expedition")
 
         df_resultat_magasin_total = get_prix_alt_f4(df_cartes_intrant, message_mag_placerholder, progress_placeholder, 
                                                     "Visite de Alt F4 :", list_of_basic_lands, session)
         df_carte_non_trouvee = mettrer_a_jour_les_cartes_non_trouvee(df_carte_non_trouvee, df_resultat_magasin_total)
         progress_placeholder.info("🔄 Sauvegarde des trouvailles...")
-        sauvegarder_donnees_magasin(url, key, df_cartes_intrant, df_resultat_magasin_total, "inventaire_Alt_F4")
+        sauvegarder_donnees_magasin(supabase, df_cartes_intrant, df_resultat_magasin_total, "inventaire_Alt_F4")
 
     finally:
         session.close()
 
     message_mag_placerholder.empty()
-    progress_placeholder.success("✅ Algorithme terminé !")
 
-    df_carte_non_trouvee = df_carte_non_trouvee.reset_index(drop=True)
+    df_carte_non_trouvee = df_carte_non_trouvee.sort_values(["nom_carte"], ascending= [True]).reset_index(drop=True)
     df_carte_non_trouvee.index = df_carte_non_trouvee.index + 1
 
-    st.write("Nombre de carte non trouvee :", df_carte_non_trouvee.shape[0])
-    st.write("La liste de cartes non trouvees lors de la recherche :") 
-    st.dataframe(df_carte_non_trouvee, use_container_width=True)
+    if df_carte_non_trouvee.shape[0] <= 0:
+        progress_placeholder.success("✅ Algorithme terminé ! Toutes les cartes ont ete trouvees")
+
+    else:
+        progress_placeholder.warning("⚠️ Algorithme terminé ! Certaines cartes n'ont pas ete trouvees")
+        st.write("Nombre de carte non trouvee :", df_carte_non_trouvee.shape[0], "/", df_cartes_intrant.shape[0])
+        st.write("La liste de cartes non trouvees lors de la recherche :") 
+        st.dataframe(df_carte_non_trouvee, use_container_width=True)
 
 st.caption("© 2025 - MTG Card Finder Montreal")
