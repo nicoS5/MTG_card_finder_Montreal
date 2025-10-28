@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
-from supabase import create_client
 import re
+from supabase import create_client
+from unidecode import unidecode
 
 # Fonctions --------------------------------------------------------------------------------------------------------
 
@@ -19,7 +20,10 @@ def get_all_databases(supabase):
 
     df_all_data = pd.concat([get_all_data_from_magasin(supabase, "inventaire_VdC"),
                             get_all_data_from_magasin(supabase, "inventaire_Expedition"),
-                            get_all_data_from_magasin(supabase, "inventaire_Alt_F4")],
+                            get_all_data_from_magasin(supabase, "inventaire_Alt_F4"),
+                            get_all_data_from_magasin(supabase, "inventaire_Chez_Geeks"),
+                            get_all_data_from_magasin(supabase, "inventaire_GK_Lajeunesse"),
+                            get_all_data_from_magasin(supabase, "inventaire_Carta_Magica")],
                             ignore_index= True)
     df_all_data = df_all_data[df_all_data["etat_carte"] != "OoS"]
 
@@ -147,8 +151,19 @@ def separation_intrant_carte(intrant):
         separation = re.match(r"^(\d+)\s+(.+)$", ligne)
 
         if separation :
+
             quantite = int(separation.group(1))
-            nom_carte = separation.group(2).strip().lower()
+            if quantite < 0:
+                quantite = -1
+
+            nom_carte = unidecode(separation.group(2).strip().lower())
+
+            list_cartes.append({"nom_carte": nom_carte,
+                                "quantite": quantite})
+        
+        else :
+            quantite = -1
+            nom_carte = ligne
             list_cartes.append({"nom_carte": nom_carte,
                                 "quantite": quantite})
     
@@ -173,7 +188,7 @@ supabase = create_client(url, key)
 
 ## Initialiser les données
 if 'list_magasins_ouverts' not in st.session_state:
-    st.session_state.list_magasins_ouverts = ["Valet de Coeur", "Expedition", "Alt F4"]
+    st.session_state.list_magasins_ouverts = ["Valet de Coeur", "Expedition", "Alt F4", "GK Lajeunesse", "Chez Geeks", "Carta Magica"]
 if 'list_magasins_fermes' not in st.session_state:
     st.session_state.list_magasins_fermes = []
 
@@ -283,43 +298,27 @@ if st.button("Lancer une recherche de prix"):
                                      "page_magasin",
                                      "date_recherche",
                                      "nom_magasin"]]
-
-    if len(st.session_state.list_magasins_ouverts) >= 1:
-        df_a_afficher = df_trouvailles[df_trouvailles["nom_magasin"] == st.session_state.list_magasins_ouverts[0]].drop(columns=["nom_magasin", "id"])
+    
+    for i in range(len(st.session_state.list_magasins_ouverts)):
+        df_a_afficher = df_trouvailles[df_trouvailles["nom_magasin"] == st.session_state.list_magasins_ouverts[i]].drop(columns=["nom_magasin", "id"])
         df_a_afficher = df_a_afficher.reset_index(drop=True)
         df_a_afficher.index = df_a_afficher.index + 1
 
-        st.write(st.session_state.list_magasins_ouverts[0], ": (", df_a_afficher["stock_carte"].sum(), "cartes a ", round((df_a_afficher["prix_carte"]*df_a_afficher["stock_carte"]).sum(), 2), "$)")
-        st.dataframe(df_a_afficher, use_container_width=True)
-
-    if len(st.session_state.list_magasins_ouverts) >= 2:
-        df_a_afficher = df_trouvailles[df_trouvailles["nom_magasin"] == st.session_state.list_magasins_ouverts[1]].drop(columns=["nom_magasin", "id"])
-        df_a_afficher = df_a_afficher.reset_index(drop=True)
-        df_a_afficher.index = df_a_afficher.index + 1
-
-        st.write(st.session_state.list_magasins_ouverts[1], ": (", df_a_afficher["stock_carte"].sum(), "cartes a ", round((df_a_afficher["prix_carte"]*df_a_afficher["stock_carte"]).sum(), 2), "$)")
-        st.dataframe(df_a_afficher, use_container_width=True)
-
-    if len(st.session_state.list_magasins_ouverts) >= 3:
-        df_a_afficher = df_trouvailles[df_trouvailles["nom_magasin"] == st.session_state.list_magasins_ouverts[2]].drop(columns=["nom_magasin", "id"])
-        df_a_afficher = df_a_afficher.reset_index(drop=True)
-        df_a_afficher.index = df_a_afficher.index + 1
-
-        st.write(st.session_state.list_magasins_ouverts[2], ": (", df_a_afficher["stock_carte"].sum(), "cartes a ", round((df_a_afficher["prix_carte"]*df_a_afficher["stock_carte"]).sum(), 2), "$)")
-        st.dataframe(df_a_afficher, use_container_width=True)
+        st.write(st.session_state.list_magasins_ouverts[i], ": (", df_a_afficher["stock_carte"].sum(), "cartes a ", round((df_a_afficher["prix_carte"]*df_a_afficher["stock_carte"]).sum(), 2), "$)")
+        st.dataframe(df_a_afficher, width='stretch')
 
     df_a_afficher = df_trouvailles[df_trouvailles["nom_magasin"] == "lands"].drop(columns=["nom_magasin", "id"])
     df_a_afficher = df_a_afficher.reset_index(drop=True)
     df_a_afficher.index = df_a_afficher.index + 1
 
     st.write("Basic lands : (", df_a_afficher["stock_carte"].sum(), " lands a ", round((df_a_afficher["prix_carte"]*df_a_afficher["stock_carte"]).sum(), 2), "$)")
-    st.dataframe(df_a_afficher, use_container_width=True)
+    st.dataframe(df_a_afficher, width='stretch')
 
     df_a_afficher = df_trouvailles[df_trouvailles["nom_magasin"] == "Indisponible"].drop(columns=["nom_magasin", "id"])
     df_a_afficher = df_a_afficher.reset_index(drop=True)
     df_a_afficher.index = df_a_afficher.index + 1
 
     st.write("Cartes non trouvees : ", df_a_afficher["stock_carte"].sum())
-    st.dataframe(df_a_afficher, use_container_width=True)
+    st.dataframe(df_a_afficher, width='stretch')
 
 st.caption("© 2025 - MTG Card Finder Montreal")
