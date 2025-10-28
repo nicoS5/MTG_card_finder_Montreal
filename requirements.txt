@@ -1,9 +1,8 @@
 streamlit
 pandas
-bs4
 requests
-datetime
-supabase
-lxml
 pytz
+beautifulsoup4
+supabase
+urllib3
 unidecode
