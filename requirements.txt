@@ -6,3 +6,4 @@ datetime
 supabase
 lxml
 pytz
+unidecode
