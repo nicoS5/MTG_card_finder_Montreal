@@ -216,10 +216,14 @@ st.header("Filtrer par magasin :")
 
 st.markdown(
 """
-Ci dessous vous avez une liste de magasin avec des boites a cocher. Vous pouvez selectionner un magasin en chochant la boite a cote de son nom. Puis vous pouvez faire l'action indiquer par les 3 boutons ci dessous aux magasins selectionnes.
+Ci dessous vous avez une liste de magasin avec des boites a cocher. 
+Vous pouvez fermer un magasin en chochant la boite a cote de son nom. 
+Le magasin sera exclu de l'optimisation des prix. 
+Vous pouvez aussi changer la priorite des magasins en modifiant le nombre sur la droite. 
+Les magasin seront evalue dans le sens croissant des priorites (1->2->3->...).
 """)
 
-st.warning("⚠️ L'ordre des magasins a de l'importance. En cas de prix egale, le magasin le plus haut dans la liste sera priorise par rapport aux autres magasins.")
+st.warning("⚠️ L'ordre des magasins peut avoir de l'importance. En cas de prix egale, le magasin le plus haut dans la liste sera priorise par rapport aux autres magasins.")
 
 df_resultat_magasin = pd.DataFrame({
         "magasin": list_de_magasins,

@@ -1008,12 +1008,6 @@ st.divider()
 
 st.header("Lancer la recherche :")
 
-st.markdown(
-"""
-Si tout est bon, c'est parti pour la recherche des cartes :
-"""
-)
-
 df_resultat_magasin = pd.DataFrame({
         "magasin": list_de_magasins,
         "est_ouvert": [True] * len(list_de_magasins)
@@ -1021,6 +1015,16 @@ df_resultat_magasin = pd.DataFrame({
 df_resultat_magasin.index = df_resultat_magasin.index + 1
 
 with st.form(key= "validation_magasin_recherche"):
+
+    st.markdown(
+    """
+    Ci dessous vous avez une liste de magasin avec des boites a cocher. 
+    Vous pouvez fermer un magasin en chochant la boite a cote de son nom. 
+    Le magasin sera exclu de la recherhe des prix. 
+    Cela pourrait accelerer le temps de recherche de l'algorithme. 
+    """
+    )
+
     df_resultat_magasin = st.data_editor(df_resultat_magasin, 
                 column_config={
                         "magasin": st.column_config.Column(
@@ -1029,8 +1033,14 @@ with st.form(key= "validation_magasin_recherche"):
                         )
                 },
                 width='stretch')
+    
+    st.markdown(
+    """
+    Si tout est bon, c'est parti pour la recherche des cartes !
+    """
+    )
         
-    validation_magasin_recherche = st.form_submit_button("Lancer la recherche !")
+    validation_magasin_recherche = st.form_submit_button("Lancer la recherche")
 
 if validation_magasin_recherche:
 
