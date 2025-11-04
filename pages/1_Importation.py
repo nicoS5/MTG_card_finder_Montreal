@@ -300,6 +300,11 @@ def get_prix_du_valet_de_coeur(df_cartes_intrant, message_mag_placerholder, prog
 
                     match_pour_lien_carte = re.search(r'href="([^"]*)"', str(soup_card_info))
                     lien_carte = "https://www.carte.levalet.com" + match_pour_lien_carte.group(1) if match_pour_lien_carte else None
+
+                    Is_not_MTG_card = lien_carte.find("magic_singles") < 0
+                    if Is_not_MTG_card:
+                        Go_to_next_page: bool = False
+                        continue
                 
                     soup_card_info: BeautifulSoup = soup_all_cards[i_carte_magazin].find_all("div", class_="variant-row row")
 
@@ -421,6 +426,11 @@ def get_prix_de_l_expedition(df_cartes_intrant, message_mag_placerholder, progre
 
                     match_pour_lien_carte = re.search(r'href="([^"]*)"', str(soup_card_info))
                     lien_carte = "https://www.expeditionjeux.com" + match_pour_lien_carte.group(1) if match_pour_lien_carte else None
+
+                    Is_not_MTG_card = lien_carte.find("magic_the_gathering") < 0
+                    if Is_not_MTG_card:
+                        Go_to_next_page: bool = False
+                        continue
                 
                     soup_card_info: BeautifulSoup = soup_all_cards[i_carte_magazin].find_all("div", class_="variant-row row")
 
@@ -619,6 +629,11 @@ def get_prix_de_games_keeper_lajeunesse(df_cartes_intrant, message_mag_placerhol
 
                     match_pour_lien_carte = re.search(r'href="([^"]*)"', str(soup_card_info))
                     lien_carte = "https://www.gamekeeperonline.com" + match_pour_lien_carte.group(1) if match_pour_lien_carte else None
+
+                    Is_not_MTG_card = lien_carte.find("magic_singles") < 0
+                    if Is_not_MTG_card:
+                        Go_to_next_page: bool = False
+                        continue
                 
                     soup_card_info: BeautifulSoup = soup_all_cards[i_carte_magazin].find_all("div", class_="variant-row row")
 
@@ -741,6 +756,11 @@ def get_prix_de_carta_magica(df_cartes_intrant, message_mag_placerholder, progre
 
                     match_pour_lien_carte = re.search(r'href="([^"]*)"', str(soup_card_info))
                     lien_carte = "https://www.cartamagica.com" + match_pour_lien_carte.group(1) if match_pour_lien_carte else None
+
+                    Is_not_MTG_card = lien_carte.find("carte_de_magic") < 0
+                    if Is_not_MTG_card:
+                        Go_to_next_page: bool = False
+                        continue
                 
                     soup_card_info: BeautifulSoup = soup_all_cards[i_carte_magazin].find_all("div", class_="variant-row row")
 
@@ -863,6 +883,11 @@ def get_prix_de_chez_geeks(df_cartes_intrant, message_mag_placerholder, progress
 
                     match_pour_lien_carte = re.search(r'href="([^"]*)"', str(soup_card_info))
                     lien_carte = "https://www.chezgeeks.com" + match_pour_lien_carte.group(1) if match_pour_lien_carte else None
+
+                    Is_not_MTG_card = lien_carte.find("magic_tcg") < 0
+                    if Is_not_MTG_card:
+                        Go_to_next_page: bool = False
+                        continue
                 
                     soup_card_info: BeautifulSoup = soup_all_cards[i_carte_magazin].find_all("div", class_="variant-row row")
 
@@ -932,6 +957,7 @@ def get_Chez_Geeks_url(nom_carte: str, compteur_page: int = 1):
 # APP ---------------------------------------------------------------------------------------------------------------------------
 
 list_of_basic_lands = ["plains", "island", "swamp", "mountain", "forest", "wastes"]
+list_de_magasins = ["Alt F4", "Expedition", "Carta Magica", "GK Lajeunesse", "Valet de Coeur", "Chez Geeks"]
 temps_recherche_carte =  10 # seconde
 
 url: str = st.secrets["supabase"]["SUPABASE_URL"]
@@ -988,8 +1014,27 @@ Si tout est bon, c'est parti pour la recherche des cartes :
 """
 )
 
-if st.button("Lancer la recherche !"):
+df_resultat_magasin = pd.DataFrame({
+        "magasin": list_de_magasins,
+        "est_ouvert": [True] * len(list_de_magasins)
+    })
+df_resultat_magasin.index = df_resultat_magasin.index + 1
 
+with st.form(key= "validation_magasin_recherche"):
+    df_resultat_magasin = st.data_editor(df_resultat_magasin, 
+                column_config={
+                        "magasin": st.column_config.Column(
+                            "magasin",
+                            disabled=True  # Cette colonne ne sera pas modifiable
+                        )
+                },
+                width='stretch')
+        
+    validation_magasin_recherche = st.form_submit_button("Lancer la recherche !")
+
+if validation_magasin_recherche:
+
+    temps_lancement_algo = time.time()
     message_mag_placerholder = st.empty()
     progress_placeholder = st.empty()
 
@@ -1000,44 +1045,52 @@ if st.button("Lancer la recherche !"):
 
     df_cartes_intrant = df_cartes_intrant[df_cartes_intrant["quantite"] >= 1].groupby('nom_carte', as_index = False)['quantite'].sum()
 
+    list_magasins_ouverts = df_resultat_magasin[df_resultat_magasin['est_ouvert']]['magasin'].tolist()
+
     session = make_session_connection_site()
     
     try :
-        df_resultat_magasin_total = get_prix_du_valet_de_coeur(df_cartes_intrant, message_mag_placerholder, progress_placeholder, 
-                                                               "Visite du Valet de Coeur :", list_of_basic_lands, session)
-        df_carte_non_trouvee = mettrer_a_jour_les_cartes_non_trouvee(df_carte_non_trouvee, df_resultat_magasin_total)
-        progress_placeholder.info("🔄 Sauvegarde des trouvailles...")
-        sauvegarder_donnees_magasin(supabase, df_cartes_intrant, df_resultat_magasin_total, "inventaire_VdC")
+        if "Valet de Coeur" in list_magasins_ouverts:
+            df_resultat_magasin_total = get_prix_du_valet_de_coeur(df_cartes_intrant, message_mag_placerholder, progress_placeholder, 
+                                                                "Visite du Valet de Coeur :", list_of_basic_lands, session)
+            df_carte_non_trouvee = mettrer_a_jour_les_cartes_non_trouvee(df_carte_non_trouvee, df_resultat_magasin_total)
+            progress_placeholder.info("🔄 Sauvegarde des trouvailles...")
+            sauvegarder_donnees_magasin(supabase, df_cartes_intrant, df_resultat_magasin_total, "inventaire_VdC")
 
-        df_resultat_magasin_total = get_prix_de_l_expedition(df_cartes_intrant, message_mag_placerholder, progress_placeholder, 
-                                                             "Visite de l'Expedition :", list_of_basic_lands, session)
-        df_carte_non_trouvee = mettrer_a_jour_les_cartes_non_trouvee(df_carte_non_trouvee, df_resultat_magasin_total)
-        progress_placeholder.info("🔄 Sauvegarde des trouvailles...")
-        sauvegarder_donnees_magasin(supabase, df_cartes_intrant, df_resultat_magasin_total, "inventaire_Expedition")
+        if "Expedition" in list_magasins_ouverts:
+            df_resultat_magasin_total = get_prix_de_l_expedition(df_cartes_intrant, message_mag_placerholder, progress_placeholder, 
+                                                                "Visite de l'Expedition :", list_of_basic_lands, session)
+            df_carte_non_trouvee = mettrer_a_jour_les_cartes_non_trouvee(df_carte_non_trouvee, df_resultat_magasin_total)
+            progress_placeholder.info("🔄 Sauvegarde des trouvailles...")
+            sauvegarder_donnees_magasin(supabase, df_cartes_intrant, df_resultat_magasin_total, "inventaire_Expedition")
 
-        df_resultat_magasin_total = get_prix_alt_f4(df_cartes_intrant, message_mag_placerholder, progress_placeholder, 
-                                                    "Visite de Alt F4 :", list_of_basic_lands, session)
-        df_carte_non_trouvee = mettrer_a_jour_les_cartes_non_trouvee(df_carte_non_trouvee, df_resultat_magasin_total)
-        progress_placeholder.info("🔄 Sauvegarde des trouvailles...")
-        sauvegarder_donnees_magasin(supabase, df_cartes_intrant, df_resultat_magasin_total, "inventaire_Alt_F4")
+        if "Alt F4" in list_magasins_ouverts:
+            df_resultat_magasin_total = get_prix_alt_f4(df_cartes_intrant, message_mag_placerholder, progress_placeholder, 
+                                                        "Visite de Alt F4 :", list_of_basic_lands, session)
+            df_carte_non_trouvee = mettrer_a_jour_les_cartes_non_trouvee(df_carte_non_trouvee, df_resultat_magasin_total)
+            progress_placeholder.info("🔄 Sauvegarde des trouvailles...")
+            sauvegarder_donnees_magasin(supabase, df_cartes_intrant, df_resultat_magasin_total, "inventaire_Alt_F4")
 
-        df_resultat_magasin_total = get_prix_de_games_keeper_lajeunesse(df_cartes_intrant, message_mag_placerholder, progress_placeholder,
-                                                                        "Visite de Games Keeper Lajeunesse :", list_of_basic_lands, session)
-        df_carte_non_trouvee = mettrer_a_jour_les_cartes_non_trouvee(df_carte_non_trouvee, df_resultat_magasin_total)
-        progress_placeholder.info("🔄 Sauvegarde des trouvailles...")
-        sauvegarder_donnees_magasin(supabase, df_cartes_intrant, df_resultat_magasin_total, "inventaire_GK_Lajeunesse")
+        if "GK Lajeunesse" in list_magasins_ouverts:
+            df_resultat_magasin_total = get_prix_de_games_keeper_lajeunesse(df_cartes_intrant, message_mag_placerholder, progress_placeholder,
+                                                                            "Visite de Games Keeper Lajeunesse :", list_of_basic_lands, session)
+            df_carte_non_trouvee = mettrer_a_jour_les_cartes_non_trouvee(df_carte_non_trouvee, df_resultat_magasin_total)
+            progress_placeholder.info("🔄 Sauvegarde des trouvailles...")
+            sauvegarder_donnees_magasin(supabase, df_cartes_intrant, df_resultat_magasin_total, "inventaire_GK_Lajeunesse")
 
-        df_resultat_magasin_total = get_prix_de_carta_magica(df_cartes_intrant, message_mag_placerholder, progress_placeholder,
-                                                             "Visite de Carta Magica :", list_of_basic_lands, session)
-        df_carte_non_trouvee = mettrer_a_jour_les_cartes_non_trouvee(df_carte_non_trouvee, df_resultat_magasin_total)
-        progress_placeholder.info("🔄 Sauvegarde des trouvailles...")
-        sauvegarder_donnees_magasin(supabase, df_cartes_intrant, df_resultat_magasin_total, "inventaire_Carta_Magica")
+        if "Carta Magica" in list_magasins_ouverts:
+            df_resultat_magasin_total = get_prix_de_carta_magica(df_cartes_intrant, message_mag_placerholder, progress_placeholder,
+                                                                "Visite de Carta Magica :", list_of_basic_lands, session)
+            df_carte_non_trouvee = mettrer_a_jour_les_cartes_non_trouvee(df_carte_non_trouvee, df_resultat_magasin_total)
+            progress_placeholder.info("🔄 Sauvegarde des trouvailles...")
+            sauvegarder_donnees_magasin(supabase, df_cartes_intrant, df_resultat_magasin_total, "inventaire_Carta_Magica")
 
-        df_resultat_magasin_total = get_prix_de_chez_geeks(df_cartes_intrant, message_mag_placerholder, progress_placeholder,
-                                                             "Visite de Chez Geeks :", list_of_basic_lands, session)
-        df_carte_non_trouvee = mettrer_a_jour_les_cartes_non_trouvee(df_carte_non_trouvee, df_resultat_magasin_total)
-        progress_placeholder.info("🔄 Sauvegarde des trouvailles...")
-        sauvegarder_donnees_magasin(supabase, df_cartes_intrant, df_resultat_magasin_total, "inventaire_Chez_Geeks")
+        if "Chez Geeks" in list_magasins_ouverts:
+            df_resultat_magasin_total = get_prix_de_chez_geeks(df_cartes_intrant, message_mag_placerholder, progress_placeholder,
+                                                                "Visite de Chez Geeks :", list_of_basic_lands, session)
+            df_carte_non_trouvee = mettrer_a_jour_les_cartes_non_trouvee(df_carte_non_trouvee, df_resultat_magasin_total)
+            progress_placeholder.info("🔄 Sauvegarde des trouvailles...")
+            sauvegarder_donnees_magasin(supabase, df_cartes_intrant, df_resultat_magasin_total, "inventaire_Chez_Geeks")
 
     finally:
         session.close()
@@ -1055,5 +1108,8 @@ if st.button("Lancer la recherche !"):
         st.write("Nombre de carte non trouvee :", df_carte_non_trouvee.shape[0], "/", df_cartes_intrant.shape[0])
         st.write("La liste de cartes non trouvees lors de la recherche :") 
         st.dataframe(df_carte_non_trouvee, width='stretch')
+
+    temps_execution_algo = math.ceil((time.time() - temps_lancement_algo)/60)
+    st.write("Temps de recherche :", temps_execution_algo, "min")
 
 st.caption("© 2025 - MTG Card Finder Montreal")

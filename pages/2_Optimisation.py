@@ -180,6 +180,7 @@ st.set_page_config(
 )
 
 list_of_basic_lands = ["plains", "island", "swamp", "mountain", "forest", "wastes"]
+list_de_magasins = ["Alt F4", "Expedition", "Carta Magica", "GK Lajeunesse", "Valet de Coeur", "Chez Geeks"]
 
 ## VARIABLE GLOBAL
 url: str = st.secrets["supabase"]["SUPABASE_URL"]
@@ -188,7 +189,7 @@ supabase = create_client(url, key)
 
 ## Initialiser les données
 if 'list_magasins_ouverts' not in st.session_state:
-    st.session_state.list_magasins_ouverts = ["Valet de Coeur", "Expedition", "Alt F4", "GK Lajeunesse", "Chez Geeks", "Carta Magica"]
+    st.session_state.list_magasins_ouverts = list_de_magasins
 if 'list_magasins_fermes' not in st.session_state:
     st.session_state.list_magasins_fermes = []
 
@@ -203,7 +204,6 @@ st.markdown(
 Entrez la liste de cartes a chercher ci-dessous :
 """)
 
-## Debut App
 text_cartes_brut = st.text_area(
     label = "Liste de cartes Magic :",
     label_visibility= "hidden",
@@ -216,55 +216,29 @@ st.header("Filtrer par magasin :")
 
 st.markdown(
 """
-Ci dessous vous avez une liste de magasin avec des boites a cocher. 
-
-Vous pouvez selectionner un magasin en chochant la boite a cote de son nom. 
-
-Puis vous pouvez faire l'action indiquer par les 3 boutons ci dessous aux magasins selectionnes.
+Ci dessous vous avez une liste de magasin avec des boites a cocher. Vous pouvez selectionner un magasin en chochant la boite a cote de son nom. Puis vous pouvez faire l'action indiquer par les 3 boutons ci dessous aux magasins selectionnes.
 """)
 
 st.warning("⚠️ L'ordre des magasins a de l'importance. En cas de prix egale, le magasin le plus haut dans la liste sera priorise par rapport aux autres magasins.")
 
-col1, col2, col3 = st.columns([2, 1, 2])
+df_resultat_magasin = pd.DataFrame({
+        "magasin": list_de_magasins,
+        "est_ouvert": [True] * len(list_de_magasins),  
+        "priorite": list(range(1, len(list_de_magasins)+1))
+    })
+df_resultat_magasin.index = df_resultat_magasin.index + 1
 
-with col1:
-    st.subheader("Magasins Ouverts :")
-    magasins_a_fermer = []
-    for i, item in enumerate(st.session_state.list_magasins_ouverts):
-        if st.checkbox(f"{item}", key=f"id_magasin_a_fermer_{i}"):
-            magasins_a_fermer.append(item)
-
-with col3:
-    st.subheader("Magasins Fermes :")
-    magasins_a_ouvrir = []
-    for i, item in enumerate(st.session_state.list_magasins_fermes):
-        if st.checkbox(f"{item}", key=f"id_magasin_a_ouvrir_{i}"):
-            magasins_a_ouvrir.append(item)
-
-with col2:
-    st.write("") # Espace
-    st.write("") # Espace
-    st.write("") # Espace
-    
-    if st.button("Fermer les magasins"):
-        for item in magasins_a_fermer:
-            st.session_state.list_magasins_ouverts.remove(item)
-            st.session_state.list_magasins_fermes.append(item)
-        st.rerun()
-    
-    if st.button("Ouvrir les magasins"):
-        for item in magasins_a_ouvrir:
-            st.session_state.list_magasins_fermes.remove(item)
-            st.session_state.list_magasins_ouverts.append(item)
-        st.rerun()
-
-    if st.button("Prioriser le magasin"):
-        for item in magasins_a_fermer:
-            position_magasin = st.session_state.list_magasins_ouverts.index(item)
-            if position_magasin:
-                st.session_state.list_magasins_ouverts.remove(item)
-                st.session_state.list_magasins_ouverts.insert(position_magasin-1, item)
-        st.rerun()
+with st.form(key= "validation_magasin_optimisation"):
+    df_resultat_magasin = st.data_editor(df_resultat_magasin, 
+                column_config={
+                        "magasin": st.column_config.Column(
+                            "magasin",
+                            disabled=True  # Cette colonne ne sera pas modifiable
+                        )
+                },
+                width='stretch')
+        
+    lancer_optimisation_cartes = st.form_submit_button("Lancer une recherche de prix")
 
 st.divider()
 
@@ -277,15 +251,55 @@ Tout est pret ? Cliquer sur le bouton ci dessous !
 En cas de besoin, vous pourrez toujours modifier les paramettres ci-dessus pourlancer une nouvelle recherche.
 """)
 
-if st.button("Lancer une recherche de prix"):
+if lancer_optimisation_cartes:
 
+    list_magasins_ouverts = df_resultat_magasin[df_resultat_magasin['est_ouvert']].sort_values(by='priorite')['magasin'].tolist()
+    print(list_magasins_ouverts)
     df_all_data = get_all_databases(supabase)
 
     df_cartes_intrant = separation_intrant_carte(text_cartes_brut)
-    df_trouvailles = get_prices_in_stores(df_cartes_intrant, st.session_state.list_magasins_ouverts, df_all_data, list_of_basic_lands)
+    df_trouvailles = get_prices_in_stores(df_cartes_intrant, list_magasins_ouverts, df_all_data, list_of_basic_lands)
 
-    nb_cartes_non_trouvees = df_trouvailles[df_trouvailles["nom_magasin"] == "Indisponible"]["stock_carte"].sum()
-    st.write("Nombre de cartes trouvees : ", df_trouvailles["stock_carte"].sum()-nb_cartes_non_trouvees, "/", df_trouvailles["stock_carte"].sum(), ", Prix total : ", round((df_trouvailles["prix_carte"]*df_trouvailles["stock_carte"]).sum(), 2), "$")
+    nb_cartes_non_trouvees_total = df_trouvailles[df_trouvailles["nom_magasin"] == "Indisponible"]["stock_carte"].sum()
+    prix_deck_total = (df_trouvailles["prix_carte"]*df_trouvailles["stock_carte"]).sum()
+    st.write("Nombre de cartes trouvees : ", df_trouvailles["stock_carte"].sum()-nb_cartes_non_trouvees_total, "/", df_trouvailles["stock_carte"].sum(), 
+             ", Prix total : ", round(prix_deck_total, 2), "$ (+", round(prix_deck_total*0.15, 2), "tx)")
+
+    df_top_5_cartes_chers = df_trouvailles.sort_values(["prix_carte"], ascending=[False]).head(5)
+    prix_top_5_cartes_chers = (df_top_5_cartes_chers["prix_carte"]*df_top_5_cartes_chers["stock_carte"]).sum()
+    df_top_5_cartes_chers = df_top_5_cartes_chers.drop(columns=["id_carte", "priorite_mag"])
+    df_top_5_cartes_chers = df_top_5_cartes_chers.reset_index(drop=True)
+    df_top_5_cartes_chers.index = df_top_5_cartes_chers.index + 1
+
+    st.write("Les 5 cartes les plus cher vous coutent", round(prix_top_5_cartes_chers, 2), "$, soit", round(100*prix_top_5_cartes_chers/prix_deck_total, 1), "% du prix total.")
+    st.dataframe(df_top_5_cartes_chers, 
+                 column_config={
+                     "lien_carte": st.column_config.LinkColumn( 
+                         help = "Cliquez pour ouvrir le site", 
+                         display_text = "Acheter" 
+                         )},
+                 width='stretch')
+
+    df_matrice_fermeture_magasin = pd.DataFrame(index=list_magasins_ouverts, columns=list_magasins_ouverts)
+    for i in range(len(list_magasins_ouverts)):
+        for j in range(i, len(list_magasins_ouverts)):
+
+            if(i == j): list_magasin_reduit = [x for x in list_magasins_ouverts if x != list_magasins_ouverts[i]]
+            else : list_magasin_reduit = [x for x in list_magasins_ouverts if x != list_magasins_ouverts[i] and x != list_magasins_ouverts[j]]
+
+            if (len(list_magasin_reduit) <= 0):
+                continue
+
+            df_trouvailles_fermeture = get_prices_in_stores(df_cartes_intrant, list_magasin_reduit, df_all_data, list_of_basic_lands)
+            nb_cartes_perdu = df_trouvailles_fermeture[df_trouvailles_fermeture["nom_magasin"] == "Indisponible"]["stock_carte"].sum() - nb_cartes_non_trouvees_total
+            prix_fermeture_magasins = round((df_trouvailles_fermeture["prix_carte"]*df_trouvailles_fermeture["stock_carte"]).sum() - prix_deck_total, 2) 
+
+            if nb_cartes_perdu > 0: message_matrice = f"{prix_fermeture_magasins}$ ({nb_cartes_perdu} cartes perdues)"
+            else: message_matrice = f"{prix_fermeture_magasins}$"
+            df_matrice_fermeture_magasin.at[list_magasins_ouverts[j], list_magasins_ouverts[i]] = message_matrice
+
+    st.write("Ci-dessous un tableau montrant de combien le prix du deck augmenterait si on decidait de ne pas visiter un magasin :")
+    st.dataframe(df_matrice_fermeture_magasin, width='stretch')
 
     df_trouvailles["info_carte"] = df_trouvailles["langue_carte"] + ", " + df_trouvailles["etat_carte"]
     df_trouvailles["id"] = range(1, len(df_trouvailles)+1)
@@ -299,14 +313,22 @@ if st.button("Lancer une recherche de prix"):
                                      "date_recherche",
                                      "nom_magasin"]]
     
-    for i in range(len(st.session_state.list_magasins_ouverts)):
-        df_a_afficher = df_trouvailles[df_trouvailles["nom_magasin"] == st.session_state.list_magasins_ouverts[i]].drop(columns=["nom_magasin", "id"])
+    st.write("Cartes a acheter et magasins a visiter :")
+
+    for i in range(len(list_magasins_ouverts)):
+        df_a_afficher = df_trouvailles[df_trouvailles["nom_magasin"] == list_magasins_ouverts[i]].drop(columns=["nom_magasin", "id"])
         df_a_afficher = df_a_afficher.reset_index(drop=True)
         df_a_afficher.index = df_a_afficher.index + 1
 
-        st.write(st.session_state.list_magasins_ouverts[i], ": (", df_a_afficher["stock_carte"].sum(), "cartes a ", round((df_a_afficher["prix_carte"]*df_a_afficher["stock_carte"]).sum(), 2), "$)")
-        st.dataframe(df_a_afficher, width='stretch')
-
+        st.write(list_magasins_ouverts[i], ": (", df_a_afficher["stock_carte"].sum(), "cartes a ", round((df_a_afficher["prix_carte"]*df_a_afficher["stock_carte"]).sum(), 2), "$)")
+        st.dataframe(df_a_afficher, 
+                 column_config={
+                     "lien_carte": st.column_config.LinkColumn(
+                         help = "Cliquez pour ouvrir le site", # aide quand on survole la case
+                         display_text = "Acheter"  # Texte affiché au lieu de l'URL complète
+                         )},
+                 width='stretch')
+        
     df_a_afficher = df_trouvailles[df_trouvailles["nom_magasin"] == "lands"].drop(columns=["nom_magasin", "id"])
     df_a_afficher = df_a_afficher.reset_index(drop=True)
     df_a_afficher.index = df_a_afficher.index + 1
