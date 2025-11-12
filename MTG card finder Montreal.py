@@ -47,7 +47,7 @@ st.header("Contact :")
 
 st.markdown(
 """
-Pour tous commentaires sur l'outil, ou pour toutes fonctionnalites que vous aimeriez voir ajoutees a l'outil, n'hesitez pas a me contacter.
+Pour tous commentaires sur l'outil, ou pour toutes fonctionnalites que vous aimeriez voir ajoutees a l'outil, n'hesitez pas a me laisser une message dans l'onglet **"🤝Laisser un message"**.
 """)
 
 st.caption("© 2025 - MTG Card Finder Montreal")
