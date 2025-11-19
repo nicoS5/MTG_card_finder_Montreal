@@ -9,6 +9,8 @@ from unidecode import unidecode
 ## Fontion Optimisation.py
 def Is_other_named_card(card_store_name: str, card_name: str):
 
+    if card_store_name == None: return True
+
     Bad_card_name: bool = card_store_name.find(card_name) < 0
     Bad_card_name: bool = Bad_card_name or card_store_name.find("art card") >= 0
     Bad_card_name: bool = Bad_card_name or card_store_name.find("double-sided token") >= 0
@@ -298,6 +300,8 @@ if lancer_optimisation_cartes:
 
     st.write("Ci-dessous un tableau montrant de combien le prix du deck augmenterait si on decidait de ne pas visiter un magasin :")
     st.dataframe(df_matrice_fermeture_magasin, width='stretch')
+
+    st.divider()
 
     df_trouvailles["info_carte"] = df_trouvailles["langue_carte"] + ", " + df_trouvailles["etat_carte"]
     df_trouvailles["id"] = range(1, len(df_trouvailles)+1)

@@ -794,8 +794,7 @@ def sauvegarder_donnees_magasin(supabase, df_cartes_intrant, nouvelle_data, nom_
 
         nouvelle_data_carte = nouvelle_data[nouvelle_data["nom_carte"].apply(lambda x: not(Is_other_named_card(x, carte.nom_carte)))]
 
-        if len(nouvelle_data_carte):
-
+        if len(nouvelle_data_carte) > 0:
             nouvelle_data_carte = nouvelle_data_carte.to_dict("records")
             supabase.table(nom_table).insert(nouvelle_data_carte).execute()
 def mettrer_a_jour_les_cartes_non_trouvee(carte_non_trouve, df_resultat_magasin_total):
@@ -843,7 +842,6 @@ def separation_intrant_carte(intrant):
 
     return(pd.DataFrame(list_cartes).sort_values(["nom_carte"], ascending= [True]))
 
-
 ## Fonction page 2
 def get_all_databases(supabase):
 
@@ -875,6 +873,8 @@ def get_all_data_from_magasin(supabase, nom_table_magasin):
 
     return(pd.DataFrame(all_data_magasin))
 def Is_other_named_card(card_store_name: str, card_name: str):
+
+    if card_store_name == None: return True
 
     Bad_card_name: bool = card_store_name.find(card_name) < 0
     Bad_card_name: bool = Bad_card_name or card_store_name.find("art card") >= 0
@@ -921,11 +921,9 @@ st.markdown(
 Entrez la carte a chercher ci-dessous :
 """)
 
-nom_carte_brut = st.text_area(
+nom_carte_brut = st.text_input(
     label = "Liste de cartes Magic :",
-    label_visibility= "hidden",
-    value = "",
-    placeholder = "Copier coller le nom de la carte sous ce format :\nsol ring")
+    placeholder = "Copier coller le nom de la carte sous ce format : sol ring")
 
 st.divider()
 

@@ -50,6 +50,8 @@ def separation_intrant_carte(intrant):
     return(pd.DataFrame(list_cartes).sort_values(["nom_carte"], ascending= [True]))
 def Is_other_named_card(card_store_name: str, card_name: str):
 
+    if card_store_name == None: return True
+
     Bad_card_name: bool = card_store_name.find(card_name) < 0
     Bad_card_name: bool = Bad_card_name or card_store_name.find("art card") >= 0
     Bad_card_name: bool = Bad_card_name or card_store_name.find("double-sided token") >= 0
@@ -592,7 +594,6 @@ def get_prix_de_games_keeper_lajeunesse(df_cartes_intrant, message_mag_placerhol
         compteur_instance_carte: int = 0
         while Go_to_next_page:
 
-            # print(carte.nom_carte, "-> page", compteur_page
             url_site: str = get_gk_lajeunesse_url(carte.nom_carte, compteur_page=compteur_page)
 
             try:
@@ -958,7 +959,7 @@ def get_Chez_Geeks_url(nom_carte: str, compteur_page: int = 1):
 
 list_of_basic_lands = ["plains", "island", "swamp", "mountain", "forest", "wastes"]
 list_de_magasins = ["Alt F4", "Expedition", "Carta Magica", "GK Lajeunesse", "Valet de Coeur", "Chez Geeks"]
-temps_recherche_carte =  10 # seconde
+temps_recherche_carte =  12 # seconde
 
 url: str = st.secrets["supabase"]["SUPABASE_URL"]
 key: str  = st.secrets["supabase"]["SUPABASE_KEY"]
