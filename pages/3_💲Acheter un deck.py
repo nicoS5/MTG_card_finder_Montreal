@@ -135,6 +135,171 @@ def get_all_data_from_magasin(supabase, nom_table_magasin):
         offset += page_size
 
     return(pd.DataFrame(all_data_magasin))
+def init_session_state_results():
+    if 'input_recherche_text' not in st.session_state:
+        st.session_state.input_recherche_text = ""
+    if 'trouvailles_deck' not in st.session_state:
+        st.session_state.trouvailles_deck = pd.DataFrame()
+    if 'matrice_fermeture_magasin' not in st.session_state:
+        st.session_state.matrice_fermeture_magasin = pd.DataFrame()
+    if 'magasin_altf4' not in st.session_state:
+        st.session_state.magasin_altf4 = pd.DataFrame()
+    if 'magasin_expedition' not in st.session_state:
+        st.session_state.magasin_expedition = pd.DataFrame()
+    if 'magasin_carta_magica' not in st.session_state:
+        st.session_state.magasin_carta_magica = pd.DataFrame()
+    if 'magasin_gk_lajeunesse' not in st.session_state:
+        st.session_state.magasin_gk_lajeunesse = pd.DataFrame()
+    if 'magasin_vdc' not in st.session_state:
+        st.session_state.magasin_vdc = pd.DataFrame()
+    if 'magasin_chez_geeks' not in st.session_state:
+        st.session_state.magasin_chez_geeks = pd.DataFrame()
+    if 'lands_a_acheter' not in st.session_state:
+        st.session_state.lands_a_acheter = pd.DataFrame()
+    if 'cartes_non_trouvees' not in st.session_state:
+        st.session_state.cartes_non_trouvees = pd.DataFrame()
+    if 'Recherche_achat_deck_effectuee' not in st.session_state:
+        st.session_state.Recherche_achat_deck_effectuee = False
+def ui_show_results_dataframes():
+    if st.session_state.Recherche_achat_deck_effectuee:
+        st.header("Meilleurs prix trouves :")
+
+    if (len(st.session_state.trouvailles_deck) > 0):
+
+        df_trouvailles = st.session_state.trouvailles_deck
+
+        nb_cartes_non_trouvees_total = df_trouvailles[df_trouvailles["nom_magasin"] == "Indisponible"]["stock_carte"].sum()
+        prix_deck_total = (df_trouvailles["prix_carte"]*df_trouvailles["stock_carte"]).sum()
+        st.write("Nombre de cartes trouvees : ", df_trouvailles["stock_carte"].sum()-nb_cartes_non_trouvees_total, "/", df_trouvailles["stock_carte"].sum(), 
+                ", Prix total : ", round(prix_deck_total, 2), "$ (+", round(prix_deck_total*0.15, 2), "tx)")
+
+        df_top_5_cartes_chers = df_trouvailles.sort_values(["prix_carte"], ascending=[False]).head(5)
+        prix_top_5_cartes_chers = (df_top_5_cartes_chers["prix_carte"]*df_top_5_cartes_chers["stock_carte"]).sum()
+        df_top_5_cartes_chers = df_top_5_cartes_chers.drop(columns=["id_carte", "priorite_mag"])
+        df_top_5_cartes_chers = df_top_5_cartes_chers.reset_index(drop=True)
+        df_top_5_cartes_chers.index = df_top_5_cartes_chers.index + 1
+
+        st.write("Les 5 cartes les plus cher vous coutent", round(prix_top_5_cartes_chers, 2), "$, soit", round(100*prix_top_5_cartes_chers/prix_deck_total, 1), "% du prix total :")
+        st.dataframe(df_top_5_cartes_chers, 
+                    column_config={
+                        "lien_carte": st.column_config.LinkColumn( 
+                            help = "Cliquez pour ouvrir le site", 
+                            display_text = "Acheter" 
+                            )},
+                    width='stretch')
+
+    if (len(st.session_state.matrice_fermeture_magasin) > 0):
+        st.write("Ci-dessous un tableau montrant de combien le prix du deck augmenterait si on decidait de ne pas visiter un magasin :")
+        st.dataframe(st.session_state.matrice_fermeture_magasin, width='stretch')
+
+    if st.session_state.Recherche_achat_deck_effectuee:
+        st.divider()
+        st.header("Cartes a acheter et magasins a visiter :")
+
+    if (len(st.session_state.magasin_altf4) > 0):
+
+        df_a_afficher = st.session_state.magasin_altf4
+
+        st.write("Alt F4", ": (", df_a_afficher["stock_carte"].sum(), "cartes a ", round((df_a_afficher["prix_carte"]*df_a_afficher["stock_carte"]).sum(), 2), "$)")
+        st.dataframe(df_a_afficher, 
+                    column_config={
+                        "lien_carte": st.column_config.LinkColumn(
+                            help = "Cliquez pour ouvrir le site", # aide quand on survole la case
+                            display_text = "Acheter"  # Texte affiché au lieu de l'URL complète
+                            )},
+                    width='stretch')
+
+        if st.button("test bouto2"):
+            st.write("test_effectue")
+
+    if (len(st.session_state.magasin_expedition) > 0):
+
+        df_a_afficher = st.session_state.magasin_expedition
+
+        st.write("Expedition", ": (", df_a_afficher["stock_carte"].sum(), "cartes a ", round((df_a_afficher["prix_carte"]*df_a_afficher["stock_carte"]).sum(), 2), "$)")
+        st.dataframe(df_a_afficher, 
+                    column_config={
+                        "lien_carte": st.column_config.LinkColumn(
+                            help = "Cliquez pour ouvrir le site", # aide quand on survole la case
+                            display_text = "Acheter"  # Texte affiché au lieu de l'URL complète
+                            )},
+                    width='stretch')
+        
+    if (len(st.session_state.magasin_carta_magica) > 0):
+
+        df_a_afficher = st.session_state.magasin_carta_magica
+
+        st.write("Carta Magica", ": (", df_a_afficher["stock_carte"].sum(), "cartes a ", round((df_a_afficher["prix_carte"]*df_a_afficher["stock_carte"]).sum(), 2), "$)")
+        st.dataframe(df_a_afficher, 
+                    column_config={
+                        "lien_carte": st.column_config.LinkColumn(
+                            help = "Cliquez pour ouvrir le site", # aide quand on survole la case
+                            display_text = "Acheter"  # Texte affiché au lieu de l'URL complète
+                            )},
+                    width='stretch')
+        
+    if (len(st.session_state.magasin_gk_lajeunesse) > 0):
+
+        df_a_afficher = st.session_state.magasin_gk_lajeunesse
+
+        st.write("GK Lajeunesse", ": (", df_a_afficher["stock_carte"].sum(), "cartes a ", round((df_a_afficher["prix_carte"]*df_a_afficher["stock_carte"]).sum(), 2), "$)")
+        st.dataframe(df_a_afficher, 
+                    column_config={
+                        "lien_carte": st.column_config.LinkColumn(
+                            help = "Cliquez pour ouvrir le site", # aide quand on survole la case
+                            display_text = "Acheter"  # Texte affiché au lieu de l'URL complète
+                            )},
+                    width='stretch')
+        
+    if (len(st.session_state.magasin_vdc) > 0):
+
+        df_a_afficher = st.session_state.magasin_vdc
+
+        st.write("Valet de Coeur", ": (", df_a_afficher["stock_carte"].sum(), "cartes a ", round((df_a_afficher["prix_carte"]*df_a_afficher["stock_carte"]).sum(), 2), "$)")
+        st.dataframe(df_a_afficher, 
+                    column_config={
+                        "lien_carte": st.column_config.LinkColumn(
+                            help = "Cliquez pour ouvrir le site", # aide quand on survole la case
+                            display_text = "Acheter"  # Texte affiché au lieu de l'URL complète
+                            )},
+                    width='stretch')
+        
+    if (len(st.session_state.magasin_chez_geeks) > 0):
+
+        df_a_afficher = st.session_state.magasin_chez_geeks
+
+        st.write("Chez Geeks", ": (", df_a_afficher["stock_carte"].sum(), "cartes a ", round((df_a_afficher["prix_carte"]*df_a_afficher["stock_carte"]).sum(), 2), "$)")
+        st.dataframe(df_a_afficher, 
+                    column_config={
+                        "lien_carte": st.column_config.LinkColumn(
+                            help = "Cliquez pour ouvrir le site", # aide quand on survole la case
+                            display_text = "Acheter"  # Texte affiché au lieu de l'URL complète
+                            )},
+                    width='stretch')
+        
+    if (len(st.session_state.lands_a_acheter) > 0):
+        df_a_afficher = st.session_state.lands_a_acheter
+
+        st.write("Basic lands : (", df_a_afficher["stock_carte"].sum(), " lands a ", round((df_a_afficher["prix_carte"]*df_a_afficher["stock_carte"]).sum(), 2), "$)")
+        st.dataframe(df_a_afficher, width='stretch')
+
+    if (len(st.session_state.cartes_non_trouvees) > 0):
+        df_a_afficher = st.session_state.cartes_non_trouvees
+
+        st.write("Cartes non trouvees : ", df_a_afficher["stock_carte"].sum())
+        st.dataframe(df_a_afficher, width='stretch')
+def reset_session_state_results():
+    st.session_state.input_recherche_text = text_cartes_brut
+    st.session_state.trouvailles_deck = pd.DataFrame()
+    st.session_state.matrice_fermeture_magasin = pd.DataFrame()
+    st.session_state.magasin_altf4 = pd.DataFrame()
+    st.session_state.magasin_expedition = pd.DataFrame()
+    st.session_state.magasin_carta_magica = pd.DataFrame()
+    st.session_state.magasin_gk_lajeunesse = pd.DataFrame()
+    st.session_state.magasin_vdc = pd.DataFrame()
+    st.session_state.magasin_chez_geeks = pd.DataFrame()
+    st.session_state.lands_a_acheter = pd.DataFrame()
+    st.session_state.cartes_non_trouvees = pd.DataFrame()
 
 ## Fontion page 1
 def separation_intrant_carte(intrant):
@@ -184,10 +349,11 @@ st.set_page_config(
 list_of_basic_lands = ["plains", "island", "swamp", "mountain", "forest", "wastes"]
 list_de_magasins = ["Alt F4", "Expedition", "Carta Magica", "GK Lajeunesse", "Valet de Coeur", "Chez Geeks"]
 
-## VARIABLE GLOBAL
 url: str = st.secrets["supabase"]["SUPABASE_URL"]
 key: str  = st.secrets["supabase"]["SUPABASE_KEY"]
 supabase = create_client(url, key)
+
+init_session_state_results()
 
 st.title("💲Acheter un deck")
 
@@ -203,7 +369,7 @@ Entrez la liste de cartes a chercher ci-dessous :
 text_cartes_brut = st.text_area(
     label = "Liste de cartes Magic :",
     label_visibility= "hidden",
-    value = "",
+    value = st.session_state.input_recherche_text,
     placeholder = "Copier coller la quantite et le noms des cartes sous ce format :\n1 sol ring\n1 arcane signet\n...")
 
 st.divider()
@@ -240,18 +406,16 @@ with st.form(key= "validation_magasin_optimisation"):
         
     lancer_optimisation_cartes = st.form_submit_button("Lancer une recherche de prix")
 
-st.divider()
+ui_show_results_dataframes()
 
-st.header("Trouver les meilleurs prix :")
-
-st.markdown(
-"""
-Tout est pret ? Cliquer sur le bouton ci dessous !
-
-En cas de besoin, vous pourrez toujours modifier les paramettres ci-dessus pourlancer une nouvelle recherche.
-""")
+progress_placeholder = st.empty()
 
 if lancer_optimisation_cartes:
+
+    reset_session_state_results()
+
+    st.session_state.Recherche_achat_deck_effectuee = True
+    progress_placeholder.info("🔦 Recherche des cartes ...")
 
     list_magasins_ouverts = df_resultat_magasin[df_resultat_magasin['est_ouvert']].sort_values(by='priorite')['magasin'].tolist()
     
@@ -259,29 +423,16 @@ if lancer_optimisation_cartes:
 
     df_cartes_intrant = separation_intrant_carte(text_cartes_brut)
     df_trouvailles = get_prices_in_stores(df_cartes_intrant, list_magasins_ouverts, df_all_data, list_of_basic_lands)
+    st.session_state.trouvailles_deck = df_trouvailles
 
     nb_cartes_non_trouvees_total = df_trouvailles[df_trouvailles["nom_magasin"] == "Indisponible"]["stock_carte"].sum()
     prix_deck_total = (df_trouvailles["prix_carte"]*df_trouvailles["stock_carte"]).sum()
-    st.write("Nombre de cartes trouvees : ", df_trouvailles["stock_carte"].sum()-nb_cartes_non_trouvees_total, "/", df_trouvailles["stock_carte"].sum(), 
-             ", Prix total : ", round(prix_deck_total, 2), "$ (+", round(prix_deck_total*0.15, 2), "tx)")
-
-    df_top_5_cartes_chers = df_trouvailles.sort_values(["prix_carte"], ascending=[False]).head(5)
-    prix_top_5_cartes_chers = (df_top_5_cartes_chers["prix_carte"]*df_top_5_cartes_chers["stock_carte"]).sum()
-    df_top_5_cartes_chers = df_top_5_cartes_chers.drop(columns=["id_carte", "priorite_mag"])
-    df_top_5_cartes_chers = df_top_5_cartes_chers.reset_index(drop=True)
-    df_top_5_cartes_chers.index = df_top_5_cartes_chers.index + 1
-
-    st.write("Les 5 cartes les plus cher vous coutent", round(prix_top_5_cartes_chers, 2), "$, soit", round(100*prix_top_5_cartes_chers/prix_deck_total, 1), "% du prix total.")
-    st.dataframe(df_top_5_cartes_chers, 
-                 column_config={
-                     "lien_carte": st.column_config.LinkColumn( 
-                         help = "Cliquez pour ouvrir le site", 
-                         display_text = "Acheter" 
-                         )},
-                 width='stretch')
 
     df_matrice_fermeture_magasin = pd.DataFrame(index=list_magasins_ouverts, columns=list_magasins_ouverts)
     for i in range(len(list_magasins_ouverts)):
+
+        progress_placeholder.info("🔦 Optimisation des magasins : " + str(i+1) + "/" + str(len(list_magasins_ouverts)) + " ...")
+        
         for j in range(i, len(list_magasins_ouverts)):
 
             if(i == j): list_magasin_reduit = [x for x in list_magasins_ouverts if x != list_magasins_ouverts[i]]
@@ -298,10 +449,7 @@ if lancer_optimisation_cartes:
             else: message_matrice = f"{prix_fermeture_magasins}$"
             df_matrice_fermeture_magasin.at[list_magasins_ouverts[j], list_magasins_ouverts[i]] = message_matrice
 
-    st.write("Ci-dessous un tableau montrant de combien le prix du deck augmenterait si on decidait de ne pas visiter un magasin :")
-    st.dataframe(df_matrice_fermeture_magasin, width='stretch')
-
-    st.divider()
+    st.session_state.matrice_fermeture_magasin = df_matrice_fermeture_magasin
 
     df_trouvailles["info_carte"] = df_trouvailles["langue_carte"] + ", " + df_trouvailles["etat_carte"]
     df_trouvailles["id"] = range(1, len(df_trouvailles)+1)
@@ -315,34 +463,31 @@ if lancer_optimisation_cartes:
                                      "date_recherche",
                                      "nom_magasin"]]
     
-    st.write("Cartes a acheter et magasins a visiter :")
-
     for i in range(len(list_magasins_ouverts)):
         df_a_afficher = df_trouvailles[df_trouvailles["nom_magasin"] == list_magasins_ouverts[i]].drop(columns=["nom_magasin", "id"])
         df_a_afficher = df_a_afficher.reset_index(drop=True)
         df_a_afficher.index = df_a_afficher.index + 1
-
-        st.write(list_magasins_ouverts[i], ": (", df_a_afficher["stock_carte"].sum(), "cartes a ", round((df_a_afficher["prix_carte"]*df_a_afficher["stock_carte"]).sum(), 2), "$)")
-        st.dataframe(df_a_afficher, 
-                 column_config={
-                     "lien_carte": st.column_config.LinkColumn(
-                         help = "Cliquez pour ouvrir le site", # aide quand on survole la case
-                         display_text = "Acheter"  # Texte affiché au lieu de l'URL complète
-                         )},
-                 width='stretch')
+                
+        if list_magasins_ouverts[i] == "Alt F4": st.session_state.magasin_altf4 = df_a_afficher
+        elif list_magasins_ouverts[i] == "Expedition": st.session_state.magasin_expedition = df_a_afficher
+        elif list_magasins_ouverts[i] == "Carta Magica": st.session_state.magasin_carta_magica = df_a_afficher
+        elif list_magasins_ouverts[i] == "GK Lajeunesse": st.session_state.magasin_gk_lajeunesse = df_a_afficher
+        elif list_magasins_ouverts[i] == "Valet de Coeur": st.session_state.magasin_vdc = df_a_afficher
+        elif list_magasins_ouverts[i] == "Chez Geeks": st.session_state.magasin_chez_geeks = df_a_afficher
+        else: print("magasin non reconnue !!!")
         
-    df_a_afficher = df_trouvailles[df_trouvailles["nom_magasin"] == "lands"].drop(columns=["nom_magasin", "id"])
+    df_a_afficher = df_trouvailles[df_trouvailles["nom_magasin"] == "lands"].drop(columns=["nom_magasin", "id", 
+                                                                                           "lien_carte", "page_magasin",
+                                                                                           "date_recherche"])
     df_a_afficher = df_a_afficher.reset_index(drop=True)
     df_a_afficher.index = df_a_afficher.index + 1
-
-    st.write("Basic lands : (", df_a_afficher["stock_carte"].sum(), " lands a ", round((df_a_afficher["prix_carte"]*df_a_afficher["stock_carte"]).sum(), 2), "$)")
-    st.dataframe(df_a_afficher, width='stretch')
+    st.session_state.lands_a_acheter = df_a_afficher
 
     df_a_afficher = df_trouvailles[df_trouvailles["nom_magasin"] == "Indisponible"].drop(columns=["nom_magasin", "id"])
     df_a_afficher = df_a_afficher.reset_index(drop=True)
     df_a_afficher.index = df_a_afficher.index + 1
+    st.session_state.cartes_non_trouvees = df_a_afficher
 
-    st.write("Cartes non trouvees : ", df_a_afficher["stock_carte"].sum())
-    st.dataframe(df_a_afficher, width='stretch')
+    st.rerun()
 
 st.caption("© 2025 - MTG Card Finder Montreal")

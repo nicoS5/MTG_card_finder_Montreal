@@ -965,6 +965,9 @@ url: str = st.secrets["supabase"]["SUPABASE_URL"]
 key: str  = st.secrets["supabase"]["SUPABASE_KEY"]
 supabase = create_client(url, key)
 
+if 'input_recherche_text' not in st.session_state:
+    st.session_state.input_recherche_text = ""
+
 st.set_page_config(
     page_title="Chercher un deck",
     page_icon="🔦",
@@ -986,7 +989,7 @@ Entrez la liste de cartes a chercher ci-dessous :
 text_cartes_brut = st.text_area(
     label = "Liste de cartes Magic :",
     label_visibility= "hidden",
-    value = "",
+    value = st.session_state.input_recherche_text,
     placeholder = "Copier coller la quantite et le noms des cartes sous ce format :\n1 sol ring\n1 arcane signet\n..."
 )
 
@@ -1044,6 +1047,8 @@ with st.form(key= "validation_magasin_recherche"):
     validation_magasin_recherche = st.form_submit_button("Lancer la recherche")
 
 if validation_magasin_recherche:
+
+    st.session_state.input_recherche_text = text_cartes_brut
 
     temps_lancement_algo = time.time()
     message_mag_placerholder = st.empty()

@@ -884,6 +884,9 @@ def Is_other_named_card(card_store_name: str, card_name: str):
 
     return Bad_card_name
 
+if 'input_recherche_text_unique' not in st.session_state:
+    st.session_state.input_recherche_text_unique = ""
+
 st.set_page_config(
     page_title="Chercher une carte",
     page_icon="☝️",
@@ -923,6 +926,8 @@ Entrez la carte a chercher ci-dessous :
 
 nom_carte_brut = st.text_input(
     label = "Liste de cartes Magic :",
+    label_visibility= "hidden",
+    value = st.session_state.input_recherche_text_unique,
     placeholder = "Copier coller le nom de la carte sous ce format : sol ring")
 
 st.divider()
@@ -931,6 +936,8 @@ message_mag_placerholder = st.empty()
 progress_placeholder = st.empty()
 
 if st.button("Rechercher la carte"):
+
+    st.session_state.input_recherche_text_unique = nom_carte_brut
 
     df_cartes_intrant = separation_intrant_carte("1 " + nom_carte_brut)
     df_cartes_intrant = df_cartes_intrant[df_cartes_intrant["quantite"] >= 1].groupby('nom_carte', as_index = False)['quantite'].sum()
